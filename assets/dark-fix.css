@@ -26,13 +26,13 @@ html, body {
     radial-gradient(circle at 60% 10%, rgba(59,130,246,.08) 0%, transparent 55%),
     radial-gradient(rgba(255,255,255,.045) 1px, transparent 1px) !important;
   background-size: 100% 100%, 28px 28px !important;
-  background-attachment: fixed !important;
 }
 
 /* ── Container ───────────────────────────────────────────── */
 .container-fluid {
   max-width: 1200px;
   margin: 0 auto;
+  background: transparent !important;
 }
 
 /* ── Nav ─────────────────────────────────────────────────── */
@@ -73,14 +73,15 @@ html, body {
   padding: 18px 0 26px;
 }
 .pf-hero-title {
-  font-size: clamp(30px, 6vw, 46px);
-  font-weight: 700;
-  line-height: 1.05;
-  letter-spacing: -.03em;
-  background: linear-gradient(135deg, #f0f0f0 28%, #3b82f6 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-size: clamp(30px, 6vw, 46px) !important;
+  font-weight: 700 !important;
+  line-height: 1.05 !important;
+  letter-spacing: -.03em !important;
+  color: transparent !important;
+  background: linear-gradient(135deg, #f0f0f0 28%, #3b82f6 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
 }
 .pf-hero-sub {
   color: var(--muted) !important;
