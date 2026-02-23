@@ -890,14 +890,12 @@ app.layout = dbc.Container(
     children=[
         html.Nav(
             [
-                html.A("Preflight", href="#", className="pf-logo"),
+                html.A("HK", href="https://kooexperience.com", className="pf-logo"),
                 html.Div(
-                    html.A(
-                        "← kooexperience.com",
-                        href="https://kooexperience.com",
-                        target="_blank",
-                        rel="noopener",
-                    ),
+                    [
+                        html.A("Home", href="https://kooexperience.com"),
+                        html.A("GitHub", href="https://github.com/haomingkoo", target="_blank", rel="noopener"),
+                    ],
                     className="pf-nav-links",
                 ),
             ],
