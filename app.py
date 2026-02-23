@@ -901,6 +901,16 @@ app.layout = dbc.Container(
             ],
             className="pf-nav",
         ),
+        html.Section(
+            [
+                html.H1("Preflight", className="pf-hero-title"),
+                html.P(
+                    "Upload any CSV or Parquet — data health, EDA, correlation maps, and baseline ML models in one pass.",
+                    className="pf-hero-sub",
+                ),
+            ],
+            className="pf-hero",
+        ),
         dbc.Row(
             dbc.Col(
                 dcc.Upload(
