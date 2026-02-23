@@ -51,6 +51,10 @@ from sklearn.metrics import (
 MISSING_TOKENS_DEFAULT = ["?", "NA", "N/A", "null", "None", "nan", "NaN", ""]
 RANDOM_STATE = 42
 
+MAX_UPLOAD_MB = 50
+MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
+MAX_ROWS_WARN = 300_000
+
 CV_METRICS = [
     ("F1 Macro", "f1_macro"),
     ("Accuracy", "accuracy"),
@@ -104,6 +108,12 @@ def apply_type_overrides(df: pd.DataFrame, feature_types: Optional[Dict[str, str
 
 def parse_contents(contents: str, filename: str) -> pd.DataFrame:
     _, content_string = contents.split(",")
+    approx_bytes = len(content_string) * 3 // 4
+    if approx_bytes > MAX_UPLOAD_BYTES:
+        raise ValueError(
+            f"File too large (~{approx_bytes // (1024 * 1024):.0f} MB). "
+            f"Maximum upload size is {MAX_UPLOAD_MB} MB."
+        )
     decoded = base64.b64decode(content_string)
 
     if filename.lower().endswith(".csv"):
@@ -361,7 +371,7 @@ def missingness_heatmap_figure(
 # App + CSS
 # -----------------------
 app = Dash(__name__, external_stylesheets=[dbc.themes.DARKLY])
-app.title = "EDA + Classification Workbench"
+app.title = "Preflight"
 
 app.index_string = """
 <!DOCTYPE html>
@@ -370,30 +380,10 @@ app.index_string = """
     {%metas%}
     <title>{%title%}</title>
     {%favicon%}
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
     {%css%}
-    <style>
-      /* DataTable paging controls readable on dark background */
-      .dash-table-container .previous-next-container button,
-      .dash-table-container .previous-next-container .page-number,
-      .dash-table-container .previous-next-container .current-page,
-      .dash-table-container .previous-next-container .first-page,
-      .dash-table-container .previous-next-container .last-page {
-        color: #ffffff !important;
-        background: #2b2b2b !important;
-        border: 1px solid #666 !important;
-      }
-      .dash-table-container .previous-next-container input {
-        color: #ffffff !important;
-        background: #2b2b2b !important;
-        border: 1px solid #666 !important;
-      }
-      .dash-table-container .previous-next-container * {
-        color: #ffffff !important;
-      }
-      .dash-table-container .previous-next-container button:disabled {
-        opacity: 0.45 !important;
-      }
-    </style>
   </head>
   <body>
     {%app_entry%}
@@ -898,21 +888,43 @@ model_pane = html.Div(
 app.layout = dbc.Container(
     fluid=True,
     children=[
-        dbc.Row(dbc.Col(html.H2("EDA + Classification Dash"), width=12)),
+        html.Nav(
+            [
+                html.A("Preflight", href="#", className="pf-logo"),
+                html.Div(
+                    html.A(
+                        "← kooexperience.com",
+                        href="https://kooexperience.com",
+                        target="_blank",
+                        rel="noopener",
+                    ),
+                    className="pf-nav-links",
+                ),
+            ],
+            className="pf-nav",
+        ),
         dbc.Row(
             dbc.Col(
                 dcc.Upload(
                     id="upload-data",
-                    children=html.Div(["Drag and Drop or ", html.A("Select a CSV / Parquet")]),
+                    children=html.Div([
+                        "Drag and drop or ",
+                        html.A("browse"),
+                        html.Span(
+                            f" · CSV or Parquet · max {MAX_UPLOAD_MB} MB",
+                            style={"color": "var(--muted)", "fontSize": "13px"},
+                        ),
+                    ]),
                     style={
                         "width": "100%",
-                        "height": "60px",
-                        "lineHeight": "60px",
+                        "height": "64px",
+                        "lineHeight": "64px",
                         "borderWidth": "1px",
                         "borderStyle": "dashed",
-                        "borderRadius": "6px",
+                        "borderRadius": "12px",
                         "textAlign": "center",
                     },
+                    max_size=MAX_UPLOAD_BYTES,
                     multiple=False,
                 ),
                 width=12,
@@ -999,23 +1011,32 @@ def toggle_corr_block(show_vals):
     State("missing-tokens", "value"),
 )
 def on_upload(contents, filename, missing_tokens_str):
-    print(f"UPLOAD START filename={filename} bytes≈{len(contents) if contents else 0}", flush=True)
     if not contents or not filename:
         return None, None, None
 
-    df = parse_contents(contents, filename)
+    try:
+        df = parse_contents(contents, filename)
+    except ValueError as e:
+        return None, None, ("error", str(e))
+    except Exception as e:
+        return None, None, ("error", f"Could not read file: {e}")
+
     tokens = [t.strip() for t in (missing_tokens_str or "").split(",")]
     df = normalize_missing_tokens(df, tokens)
 
-
-    # Detect duplicates AFTER fixing
     dup_count = len(df.columns) - len(set(df.columns))
-
     df = make_unique_columns(df)
-    note = None
+
+    notes = []
     if dup_count > 0:
-        note = f"{dup_count} duplicate column names detected and auto-renamed."
-    
+        notes.append(f"{dup_count} duplicate column name(s) auto-renamed.")
+    if len(df) > MAX_ROWS_WARN:
+        notes.append(
+            f"{len(df):,} rows loaded — large datasets may be slow. "
+            f"Consider a sampled subset for EDA."
+        )
+
+    note = ("warning", " ".join(notes)) if notes else None
     return df.to_json(date_format="iso", orient="split"), None, note
 
 @app.callback(
@@ -1025,7 +1046,9 @@ def on_upload(contents, filename, missing_tokens_str):
 def show_upload_note(note):
     if not note:
         return ""
-    return dbc.Alert(note, color="warning", dismissable=True)
+    level, msg = note
+    color = "danger" if level == "error" else "warning"
+    return dbc.Alert(msg, color=color, dismissable=True)
 
 # -----------------------
 # Data Health: profile + dropdown options

@@ -1,120 +1,274 @@
 /* =========================================================
-   Global dark theme + Dash component cleanup
-   Save as: assets/styles.css
-   Notes:
-   - Dash auto-loads any CSS under /assets
-   - This file targets: body, inputs, dropdowns, tabs, DataTable (incl pagination)
+   Preflight — portfolio-matched dark theme
    ========================================================= */
 
-/* ===== Base page ===== */
-html,
-body {
-  background-color: #1e1e1e;
-  color: #f0f0f0;
+/* ── Palette ─────────────────────────────────────────────── */
+:root {
+  --bg:        #080808;
+  --surface:   #111111;
+  --border:    #1e1e1e;
+  --accent:    #3b82f6;
+  --accent-dim: rgba(59,130,246,.12);
+  --text:      #f0f0f0;
+  --muted:     #6b7280;
 }
 
-/* Optional: make links readable on dark */
-a {
-  color: #8ab4f8;
+/* ── Base ─────────────────────────────────────────────────── */
+html, body {
+  background-color: var(--bg) !important;
+  color: var(--text) !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 15px;
+  line-height: 1.6;
+
+  /* dot grid — matches portfolio */
+  background-image:
+    radial-gradient(circle at 60% 10%, rgba(59,130,246,.08) 0%, transparent 55%),
+    radial-gradient(rgba(255,255,255,.045) 1px, transparent 1px) !important;
+  background-size: 100% 100%, 28px 28px !important;
+  background-attachment: fixed !important;
 }
 
-/* ===== Inputs (dcc.Input, native inputs) ===== */
-input,
+/* ── Container ───────────────────────────────────────────── */
+.container-fluid {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* ── Nav ─────────────────────────────────────────────────── */
+.pf-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28px 0 24px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 28px;
+}
+
+.pf-logo {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  color: var(--text) !important;
+  text-decoration: none !important;
+  background: linear-gradient(135deg, #f0f0f0 30%, #3b82f6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.pf-nav-links a {
+  color: var(--muted) !important;
+  text-decoration: none !important;
+  font-size: 13.5px;
+  letter-spacing: .02em;
+  transition: color .2s;
+}
+.pf-nav-links a:hover {
+  color: var(--text) !important;
+}
+
+/* ── HR ──────────────────────────────────────────────────── */
+hr {
+  border-color: var(--border) !important;
+  opacity: 1 !important;
+}
+
+/* ── Cards ───────────────────────────────────────────────── */
+.card {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 14px !important;
+}
+.card-body {
+  background: var(--surface) !important;
+}
+
+/* ── Tabs ────────────────────────────────────────────────── */
+.tab {
+  background-color: var(--surface) !important;
+  color: var(--muted) !important;
+  border-color: var(--border) !important;
+  font-family: 'Inter', sans-serif !important;
+  font-size: 13.5px !important;
+  font-weight: 500 !important;
+  transition: color .2s !important;
+}
+.tab:hover {
+  color: var(--text) !important;
+}
+.tab--selected {
+  background-color: var(--accent-dim) !important;
+  color: var(--accent) !important;
+  border-bottom: 2px solid var(--accent) !important;
+  font-weight: 600 !important;
+}
+.tab-content {
+  border: 1px solid var(--border) !important;
+  border-top: none !important;
+  background: transparent !important;
+}
+
+/* ── Buttons ─────────────────────────────────────────────── */
+/* General app buttons — exclude DataTable pagination controls */
+button:not(.dash-table-container button) {
+  background: var(--accent) !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 6px 18px !important;
+  font-family: 'Inter', sans-serif !important;
+  font-size: 13.5px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: opacity .2s !important;
+}
+button:not(.dash-table-container button):hover {
+  opacity: .85 !important;
+}
+button:not(.dash-table-container button):disabled {
+  opacity: .5 !important;
+  cursor: default !important;
+}
+
+/* ── Inputs ──────────────────────────────────────────────── */
+input:not([type="range"]),
 textarea {
-  background-color: #2b2b2b !important;
-  color: #f0f0f0 !important;
-  border: 1px solid #444 !important;
+  background-color: var(--surface) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
 }
 
-/* ===== Dropdowns (dcc.Dropdown uses react-select v1 classes) ===== */
+/* ── Labels ──────────────────────────────────────────────── */
+label {
+  color: var(--muted) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  letter-spacing: .1em !important;
+  text-transform: uppercase !important;
+}
+
+/* ── Checkboxes ──────────────────────────────────────────── */
+.form-check-label {
+  color: var(--text) !important;
+  font-size: 13.5px !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  font-weight: 400 !important;
+}
+
+/* ── Dropdowns (dcc.Dropdown — react-select v1) ──────────── */
 .Select-control,
 .Select-menu-outer,
 .Select-option {
-  background-color: #2b2b2b !important;
-  color: #f0f0f0 !important;
-  border-color: #444 !important;
+  background-color: var(--surface) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
 }
-
 .Select-option.is-focused {
-  background-color: #3a3a3a !important;
+  background-color: var(--accent-dim) !important;
 }
-
 .Select-value-label {
-  color: #f0f0f0 !important;
+  color: var(--text) !important;
+}
+.Select-placeholder {
+  color: var(--muted) !important;
 }
 
-/* ===== Tabs (dcc.Tabs) ===== */
-.tab {
-  background-color: #2b2b2b !important;
-  color: #ccc !important;
-  border-color: #444 !important;
+/* ── Upload zone ─────────────────────────────────────────── */
+#upload-data {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+  border-radius: 12px !important;
+  color: var(--muted) !important;
+  transition: border-color .2s, box-shadow .2s;
+}
+#upload-data:hover {
+  border-color: rgba(59,130,246,.45) !important;
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+#upload-data a {
+  color: var(--accent) !important;
 }
 
-.tab--selected {
-  background-color: #1f77b4 !important;
-  color: #fff !important;
-  font-weight: 600;
+/* ── Range sliders ───────────────────────────────────────── */
+.rc-slider-track { background-color: var(--accent) !important; }
+.rc-slider-handle {
+  border-color: var(--accent) !important;
+  background: var(--accent) !important;
+}
+.rc-slider-rail { background-color: var(--border) !important; }
+
+/* ── Alerts ──────────────────────────────────────────────── */
+.alert {
+  border-radius: 10px !important;
+  font-size: 13.5px !important;
 }
 
-/* ===== Dash DataTable: base table styling ===== */
+/* ── DataTable: base cells ───────────────────────────────── */
 .dash-table-container .dash-spreadsheet-container {
-  background-color: #2b2b2b !important;
+  background-color: var(--surface) !important;
 }
-
 .dash-table-container .dash-spreadsheet-inner td,
 .dash-table-container .dash-spreadsheet-inner th {
-  background-color: #2b2b2b !important;
-  color: #f0f0f0 !important;
-  border-color: #444 !important;
+  background-color: var(--surface) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
 }
-
 .dash-table-container .dash-spreadsheet-inner th {
   font-weight: 600;
+  letter-spacing: .04em;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--muted) !important;
 }
-
-/* If you ever see blue selection backgrounds you dislike */
 .dash-table-container .dash-spreadsheet-inner td.focused,
 .dash-table-container .dash-spreadsheet-inner td.cell--selected {
-  background-color: #333 !important;
+  background-color: var(--accent-dim) !important;
 }
 
-/* ===== Dash DataTable pagination – HARD OVERRIDE ===== */
-/* This fixes: page number text turning black after Enter (Chrome/WebKit behavior). */
+/* ── DataTable: pagination ───────────────────────────────── */
 .dash-table-container .previous-next-container,
 .dash-table-container .previous-next-container * {
   color: #ffffff !important;
 }
-
-/* Buttons */
 .dash-table-container .previous-next-container button {
   color: #ffffff !important;
-  background-color: #2b2b2b !important;
-  border: 1px solid #666 !important;
+  background-color: var(--surface) !important;
+  border: 1px solid var(--border) !important;
 }
-
 .dash-table-container .previous-next-container button:disabled {
   opacity: 0.45 !important;
 }
-
-/* Page number input – all states (Chrome needs text-fill) */
 .dash-table-container .previous-next-container input,
 .dash-table-container .previous-next-container input:not(:focus),
 .dash-table-container .previous-next-container input:focus {
   color: #ffffff !important;
-  background-color: #2b2b2b !important;
-  border: 1px solid #666 !important;
+  background-color: var(--surface) !important;
+  border: 1px solid var(--border) !important;
   -webkit-text-fill-color: #ffffff !important;
   outline: none !important;
   box-shadow: none !important;
+  border-radius: 4px !important;
 }
-
-/* Current page text (e.g., "2 / 4") */
 .dash-table-container .previous-next-container .current-page,
 .dash-table-container .previous-next-container .page-number {
   color: #ffffff !important;
 }
-
-/* Pagination arrows (scoped) */
 .dash-table-container .previous-next-container svg {
   fill: #ffffff !important;
+}
+
+/* ── DataTable: inline dropdown (typing table) ───────────── */
+.dash-spreadsheet-container .Select-control {
+  background-color: var(--surface) !important;
+  border-color: var(--border) !important;
+}
+.dash-spreadsheet-container .Select-value-label {
+  color: var(--text) !important;
+}
+.dash-spreadsheet-container .Select-menu-outer * {
+  color: var(--text) !important;
+  background-color: var(--surface) !important;
 }
