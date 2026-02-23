@@ -46,15 +46,11 @@ html, body {
 }
 
 .pf-logo {
-  font-size: 20px;
+  font-size: 17px;
   font-weight: 700;
-  letter-spacing: -.02em;
+  letter-spacing: .04em;
   color: var(--text) !important;
   text-decoration: none !important;
-  background: linear-gradient(135deg, #f0f0f0 30%, #3b82f6 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
 }
 
 .pf-nav-links a {
