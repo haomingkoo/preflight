@@ -53,6 +53,10 @@ html, body {
   text-decoration: none !important;
 }
 
+.pf-nav-links {
+  display: flex;
+  gap: 28px;
+}
 .pf-nav-links a {
   color: var(--muted) !important;
   text-decoration: none !important;
@@ -62,6 +66,29 @@ html, body {
 }
 .pf-nav-links a:hover {
   color: var(--text) !important;
+}
+
+/* ── Hero ─────────────────────────────────────────────────── */
+.pf-hero {
+  padding: 18px 0 26px;
+}
+.pf-hero-title {
+  font-size: clamp(30px, 6vw, 46px);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -.03em;
+  background: linear-gradient(135deg, #f0f0f0 28%, #3b82f6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.pf-hero-sub {
+  color: var(--muted) !important;
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  margin-top: 8px;
 }
 
 /* ── HR ──────────────────────────────────────────────────── */
