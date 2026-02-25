@@ -199,6 +199,24 @@ label {
 .Select-placeholder {
   color: var(--muted) !important;
 }
+.Select-arrow-zone {
+  border-left: 1px solid var(--border) !important;
+  background: var(--surface) !important;
+}
+
+/* Prevent global input styles from affecting react-select's internal text input.
+   That internal input is tiny, and styled borders show up as vertical artifacts. */
+.Select-input > input,
+.Select-control .Select-input > input,
+.dash-spreadsheet-container .Select-input > input {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
 
 /* ── Upload zone ─────────────────────────────────────────── */
 #upload-data {

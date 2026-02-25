@@ -412,6 +412,59 @@ store_block = html.Div(
 # -----------------------
 # Panes (always mounted)
 # -----------------------
+guide_pane = html.Div(
+    id="pane-guide",
+    children=[
+        dbc.Card(
+            dbc.CardBody(
+                [
+                    html.H4("Guide: What this app does"),
+                    html.P(
+                        "Preflight helps you check a dataset and train a quick baseline model. "
+                        "You can use it in class to show the full data workflow from upload to model results."
+                    ),
+                    html.H5("How to use it"),
+                    html.Ol(
+                        [
+                            html.Li("Upload a CSV or Parquet file at the top."),
+                            html.Li("Open Data Health to inspect missing data, unique values, and duplicates."),
+                            html.Li("Choose your target column in Data Health."),
+                            html.Li("Use Missingness to see where data is empty."),
+                            html.Li("Use Data Types to review and save feature types."),
+                            html.Li("Use EDA to explore charts and correlation patterns."),
+                            html.Li("Use Model to train a baseline and review metrics."),
+                        ]
+                    ),
+                    html.H5("What each tab teaches"),
+                    html.Ul(
+                        [
+                            html.Li("Data Health: basic data quality checks."),
+                            html.Li("Missingness: where values are missing and how often."),
+                            html.Li("Data Types: feature engineering decisions before modeling."),
+                            html.Li("EDA: visual exploration for distributions and relationships."),
+                            html.Li("Model: quick benchmark model for your current dataset."),
+                        ]
+                    ),
+                    html.H5("How the code is organized"),
+                    html.Ul(
+                        [
+                            html.Li("`app.py` contains the layout, callbacks, data prep, and model logic."),
+                            html.Li("`wsgi.py` exposes `server` so Gunicorn can run the app in Railway."),
+                            html.Li("`requirements.txt` pins library versions for stable behavior."),
+                            html.Li("`Dockerfile` and `railway.toml` define the Railway deployment setup."),
+                        ]
+                    ),
+                    html.P(
+                        "Teaching tip: start with one small dataset first. "
+                        "Then repeat with a messy dataset so students can compare the results."
+                    ),
+                ]
+            ),
+            className="mt-3",
+        )
+    ],
+)
+
 health_pane = html.Div(
     id="pane-health",
     children=[
@@ -959,16 +1012,17 @@ app.layout = dbc.Container(
         store_block,
         dcc.Tabs(
             id="tabs",
-            value="tab-health",
+            value="tab-guide",
             children=[
-                dcc.Tab(label="1) Data Health", value="tab-health"),
-                dcc.Tab(label="2) Missingness", value="tab-missing"),
-                dcc.Tab(label="3) Data Types", value="tab-typing"),
-                dcc.Tab(label="4) EDA", value="tab-eda"),
-                dcc.Tab(label="5) Model", value="tab-model"),
+                dcc.Tab(label="1) Guide", value="tab-guide"),
+                dcc.Tab(label="2) Data Health", value="tab-health"),
+                dcc.Tab(label="3) Missingness", value="tab-missing"),
+                dcc.Tab(label="4) Data Types", value="tab-typing"),
+                dcc.Tab(label="5) EDA", value="tab-eda"),
+                dcc.Tab(label="6) Model", value="tab-model"),
             ],
         ),
-        html.Div([health_pane, missing_pane, typing_pane, eda_pane, model_pane], style={"paddingTop": "12px"}),
+        html.Div([guide_pane, health_pane, missing_pane, typing_pane, eda_pane, model_pane], style={"paddingTop": "12px"}),
     ],
 )
 
@@ -976,6 +1030,7 @@ app.layout = dbc.Container(
 # Show/hide panes
 # -----------------------
 @app.callback(
+    Output("pane-guide", "style"),
     Output("pane-health", "style"),
     Output("pane-missing", "style"),
     Output("pane-typing", "style"),
@@ -987,6 +1042,7 @@ def show_hide(tab):
     show = {"display": "block"}
     hide = {"display": "none"}
     return (
+        show if tab == "tab-guide" else hide,
         show if tab == "tab-health" else hide,
         show if tab == "tab-missing" else hide,
         show if tab == "tab-typing" else hide,
@@ -1733,5 +1789,4 @@ def train_model(
 
 if __name__ == "__main__":
     app.run(debug=False, host="0.0.0.0", port=8050)
-
 
