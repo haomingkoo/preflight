@@ -1,116 +1,80 @@
-# EDA + Classification Dash
+# Preflight
 
-A Dash-based EDA and classification workbench for quick, guided exploration and baseline modeling.
+Preflight is a Dash-based EDA and baseline classification workbench for quick dataset triage and model sanity checks.
 
-## What this app does
+## Current Railway deployment (dev)
 
-- Upload CSV or Parquet
-- Basic data health summary (missingness, uniques, duplicates)
-- Missingness matrix + top missing columns
-- Feature typing suggestions with overrides
-- EDA charts per feature (numeric histograms, categorical counts/rates)
-- Correlation heatmap + top correlated-pair scatters
-- Baseline models with CV metrics + confusion matrix + ROC/PR where applicable
+Live URL:
 
----
+`https://preflight-production-7851.up.railway.app/`
 
-# 1) Run locally (recommended for large files)
+Deployment details in this repo:
 
-## Prerequisites
+- Build: Dockerfile (`[build] builder = "dockerfile"` in `railway.toml`)
+- App server: `gunicorn wsgi:server`
+- Bind: `0.0.0.0:${PORT:-8050}`
+- Health check path: `/`
+- Restart policy: `on_failure`
 
-- Python 3.12.x recommended
-- pip available
-- macOS/Linux/WSL supported
+## What the app does
 
-## Setup
+- Upload CSV or Parquet files
+- Data health summary (missingness, uniques, duplicates)
+- Missingness matrix and top missing columns
+- Feature typing suggestions with manual overrides
+- Per-feature EDA charts
+- Correlation heatmap and top correlated pair plots
+- Baseline classification models with CV metrics and confusion matrix
 
-From the `spotlight_classification/` folder:
+## Run locally
+
+Prerequisites:
+
+- Python 3.12+
+- `pip`
+
+From the `preflight/` folder:
 
 ```bash
-python -V
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-```
-
-## Run
-```bash
 python app.py
 ```
 
-## open in your browser
-```bash
-http://localhost:8050
-```
+Open:
 
----
+`http://localhost:8050`
 
-# 2) Run with Docker (reproducible, portable)
+## Run with Docker
 
-## Prerequisites
-- Docker installed
-- Access to Docker daemon (Docker Desktop, Colima, Rancher Desktop, or Otherside cpubox)
-
-## Build the image
-From the spotlight_classification/ folder (where the Dockerfile is):
-```bash
-docker build -t spotlight_classification:latest .
-```
-
-## Run the container
-Choose a free host port (example uses 8050):
-```bash
-docker run -d --rm \
-  --name spotlight_classification \
-  -p 8050:8050 \
-  spotlight_classification:latest
-```
-
-## Notes on ports and shared environments (Otherside)
-- The app listens inside the container on port 8050
-- You may change the host port if 8050 is already in use:
-
-In Otherside:
-- Docker runs on cpubox
-- You must forward ports to devbox using socat
-
-Example (White space sensitive):
-```bash
-socat TCP-LISTEN:8050,fork TCP:cpubox:8050 &
-```
-
-## open in your browser
-```bash
-http://localhost:8050
-```
-
-### Accessing the app via Coder (Shared Ports)
-
-This application can be accessed through Coder Shared Ports, which allow HTTP services running inside your workspace to be exposed to other users or the public.
-
-What are Shared Ports?
-
-Shared Ports are ports explicitly published via the Coder UI. Once shared, they can be accessed:
-- By organization members
-- By other authenticated Coder users
-- Or publicly (depending on permissions)
-
-Only ports that you explicitly share are accessible externally.
-
-
-How to enable a Shared Port in Coder
-1.	Open your Coder Workspace
-2.	Click “Open ports” (top-right of the workspace UI)
-3.	Scroll to Shared Ports
-4.	Add a port:
-    -	Port: 8050
-    -	Protocol: HTTP
-    -	Access: Authenticated (or Public if instructed)
-5.	Confirm the port is listed under Shared Ports
-
-Once enabled, Coder automatically generates a public URL
+From the `preflight/` folder:
 
 ```bash
-https://8050--main--haomingkoo--haoming-koo.coder.aiap21-aut0.aisingapore.net/
+docker build -t preflight:latest .
+docker run --rm -p 8050:8050 preflight:latest
 ```
+
+Open:
+
+`http://localhost:8050`
+
+## Deploy to Railway (dev)
+
+This project is already configured for Railway via `railway.toml` and `Dockerfile`.
+
+```bash
+railway up
+```
+
+Useful commands:
+
+```bash
+railway logs
+railway status
+```
+
+Note:
+
+- Railway provides `PORT` at runtime; local default is `8050`.
