@@ -634,52 +634,57 @@ typing_pane = html.Div(
                                 md=4,
                             ),
                             dbc.Col(
-                                [
-                                    html.H5("Typing Table (edit overrides)"),
-                                    dash_table.DataTable(
-                                        id="typing-table",
-                                        data=[],
-                                        columns=[
-                                            {"name": "column", "id": "column", "editable": False},
-                                            {"name": "suggested_type", "id": "suggested_type", "editable": False},
-                                            {"name": "override_type", "id": "override_type", "presentation": "dropdown", "editable": True},
-                                        ],
-                                        editable=True,
-                                        dropdown={
-                                            "override_type": {
-                                                "options": [{"label": t, "value": t} for t in ["numeric","ordinal", "categorical", "high_card_categorical", "drop"]]
-                                            }
-                                        },
-                                        page_size=12,
-                                        style_table={"overflowX": "auto", "maxHeight": "420px", "overflowY": "auto"},
-                                        style_cell={
-                                            "fontFamily": "Arial",
-                                            "fontSize": 12,
-                                            "padding": "6px",
-                                            "backgroundColor": "#1f1f1f",
-                                            "color": "white",
-                                            "border": "1px solid #333",
-                                            "overflow": "visible",
-                                        },
-                                        style_data={"overflow": "visible"},
-                                        style_header={"fontWeight": "bold", "backgroundColor": "#2b2b2b", "border": "1px solid #444"},
-                                        css=[
-                                            {"selector": ".dash-spreadsheet-container .dropdown", "rule": "position: static !important;"},
-                                            {"selector": ".dash-spreadsheet-container .Select-menu-outer", "rule": "display: block !important; z-index: 9999 !important;"},
-                                            {"selector": ".dash-spreadsheet-container .Select-control", "rule": "background-color: #2b2b2b !important; color: #fff !important; border: 1px solid #666 !important;"},
-                                            {"selector": ".dash-spreadsheet-container .Select-value-label", "rule": "color: #fff !important;"},
-                                            {"selector": ".dash-spreadsheet-container .Select-menu-outer *", "rule": "color: #fff !important;"},
-                                        ],
-                                    ),
-                                    dbc.Row(
-                                        [
-                                            dbc.Col(html.Button("Save Types", id="btn-save-types", n_clicks=0), width="auto"),
-                                            dbc.Col(html.Div(id="typing-save-note"), width=True),
-                                        ],
-                                        align="center",
-                                        className="mt-2",
-                                    ),
-                                ],
+                                dcc.Loading(
+                                    id="loading-typing",
+                                    type="default",
+                                    color="#3b82f6",
+                                    children=[
+                                        html.H5("Typing Table (edit overrides)"),
+                                        dash_table.DataTable(
+                                            id="typing-table",
+                                            data=[],
+                                            columns=[
+                                                {"name": "column", "id": "column", "editable": False},
+                                                {"name": "suggested_type", "id": "suggested_type", "editable": False},
+                                                {"name": "override_type", "id": "override_type", "presentation": "dropdown", "editable": True},
+                                            ],
+                                            editable=True,
+                                            dropdown={
+                                                "override_type": {
+                                                    "options": [{"label": t, "value": t} for t in ["numeric","ordinal", "categorical", "high_card_categorical", "drop"]]
+                                                }
+                                            },
+                                            page_size=12,
+                                            style_table={"overflowX": "auto", "maxHeight": "420px", "overflowY": "auto"},
+                                            style_cell={
+                                                "fontFamily": "Arial",
+                                                "fontSize": 12,
+                                                "padding": "6px",
+                                                "backgroundColor": "#1f1f1f",
+                                                "color": "white",
+                                                "border": "1px solid #333",
+                                                "overflow": "visible",
+                                            },
+                                            style_data={"overflow": "visible"},
+                                            style_header={"fontWeight": "bold", "backgroundColor": "#2b2b2b", "border": "1px solid #444"},
+                                            css=[
+                                                {"selector": ".dash-spreadsheet-container .dropdown", "rule": "position: static !important;"},
+                                                {"selector": ".dash-spreadsheet-container .Select-menu-outer", "rule": "display: block !important; z-index: 9999 !important;"},
+                                                {"selector": ".dash-spreadsheet-container .Select-control", "rule": "background-color: #2b2b2b !important; color: #fff !important; border: 1px solid #666 !important;"},
+                                                {"selector": ".dash-spreadsheet-container .Select-value-label", "rule": "color: #fff !important;"},
+                                                {"selector": ".dash-spreadsheet-container .Select-menu-outer *", "rule": "color: #fff !important;"},
+                                            ],
+                                        ),
+                                        dbc.Row(
+                                            [
+                                                dbc.Col(html.Button("Save Types", id="btn-save-types", n_clicks=0), width="auto"),
+                                                dbc.Col(html.Div(id="typing-save-note"), width=True),
+                                            ],
+                                            align="center",
+                                            className="mt-2",
+                                        ),
+                                    ],
+                                ),
                                 md=8,
                             ),
                         ]
@@ -762,63 +767,70 @@ eda_pane = html.Div(
                         value=["on"],  # default ON; set to [] if you want default OFF
                         className="mb-2",
                     ),
-                    html.Div(
-                        id="corr-block",
+                    dcc.Loading(
+                        id="loading-eda",
+                        type="default",
+                        color="#3b82f6",
                         children=[
-                            html.Hr(),
-                            html.H5("Correlation (numeric only)"),
-                            dbc.Row(
-                                [
-                                    dbc.Col(
+                            html.Div(
+                                id="corr-block",
+                                children=[
+                                    html.Hr(),
+                                    html.H5("Correlation (numeric only)"),
+                                    dbc.Row(
                                         [
-                                            html.Label("Method"),
-                                            dcc.Dropdown(
-                                                id="corr-method",
-                                                options=[
-                                                    {"label": "Spearman", "value": "spearman"},
-                                                    {"label": "Pearson", "value": "pearson"},
+                                            dbc.Col(
+                                                [
+                                                    html.Label("Method"),
+                                                    dcc.Dropdown(
+                                                        id="corr-method",
+                                                        options=[
+                                                            {"label": "Spearman", "value": "spearman"},
+                                                            {"label": "Pearson", "value": "pearson"},
+                                                        ],
+                                                        value="spearman",
+                                                        clearable=False,
+                                                    ),
                                                 ],
-                                                value="spearman",
-                                                clearable=False,
+                                                md=3,
+                                            ),
+                                            dbc.Col(
+                                                [
+                                                    html.Label("Min |r|"),
+                                                    dcc.Slider(
+                                                        id="corr-min-r",
+                                                        min=0.1,
+                                                        max=0.95,
+                                                        step=0.05,
+                                                        value=0.5,
+                                                    ),
+                                                ],
+                                                md=6,
+                                            ),
+                                            dbc.Col(
+                                                [
+                                                    html.Label("Top pairs"),
+                                                    dcc.Input(
+                                                        id="corr-top-k",
+                                                        type="number",
+                                                        value=10,
+                                                        min=1,
+                                                        step=1,
+                                                        style={"width": "100%"},
+                                                    ),
+                                                ],
+                                                md=3,
                                             ),
                                         ],
-                                        md=3,
+                                        className="mb-2",
                                     ),
-                                    dbc.Col(
-                                        [
-                                            html.Label("Min |r|"),
-                                            dcc.Slider(
-                                                id="corr-min-r",
-                                                min=0.1,
-                                                max=0.95,
-                                                step=0.05,
-                                                value=0.5,
-                                            ),
-                                        ],
-                                        md=6,
-                                    ),
-                                    dbc.Col(
-                                        [
-                                            html.Label("Top pairs"),
-                                            dcc.Input(
-                                                id="corr-top-k",
-                                                type="number",
-                                                value=10,
-                                                min=1,
-                                                step=1,
-                                                style={"width": "100%"},
-                                            ),
-                                        ],
-                                        md=3,
-                                    ),
+                                    dcc.Graph(id="corr-heatmap"),
+                                    html.Div(id="corr-scatter-container"),
                                 ],
-                                className="mb-2",
                             ),
-                            dcc.Graph(id="corr-heatmap"),
-                            html.Div(id="corr-scatter-container"),
+                            html.Div(id="eda-multi-container"),
                         ],
                     ),
-                    html.Div(id="eda-multi-container"),
                 ]
             ),
             className="mt-3",
@@ -992,7 +1004,17 @@ app.layout = dbc.Container(
             ),
             className="mb-3",
         ),
-        html.Div(id="upload-note", className="mt-2"),
+        dcc.Loading(
+            id="loading-upload",
+            type="default",
+            color="#3b82f6",
+            children=html.Div(
+                [
+                    html.Div(id="upload-loading-anchor", style={"display": "none"}),
+                    html.Div(id="upload-note", className="mt-2"),
+                ]
+            ),
+        ),
         dbc.Row(
             dbc.Col(
                 [
@@ -1070,20 +1092,21 @@ def toggle_corr_block(show_vals):
     Output("store-df-json", "data"),
     Output("target-dropdown", "value"),  # reset UI, NOT the store
     Output("store-upload-note", "data"),
+    Output("upload-loading-anchor", "children"),
     Input("upload-data", "contents"),
     State("upload-data", "filename"),
     State("missing-tokens", "value"),
 )
 def on_upload(contents, filename, missing_tokens_str):
     if not contents or not filename:
-        return None, None, None
+        return None, None, None, ""
 
     try:
         df = parse_contents(contents, filename)
     except ValueError as e:
-        return None, None, ("error", str(e))
+        return None, None, ("error", str(e)), ""
     except Exception as e:
-        return None, None, ("error", f"Could not read file: {e}")
+        return None, None, ("error", f"Could not read file: {e}"), ""
 
     tokens = [t.strip() for t in (missing_tokens_str or "").split(",")]
     df = normalize_missing_tokens(df, tokens)
@@ -1100,8 +1123,14 @@ def on_upload(contents, filename, missing_tokens_str):
             f"Consider a sampled subset for EDA."
         )
 
-    note = ("warning", " ".join(notes)) if notes else None
-    return df.to_json(date_format="iso", orient="split"), None, note
+    rows, cols = df.shape
+    summary = f"Loaded {rows:,} rows and {cols:,} columns from {filename}."
+    if notes:
+        note = ("warning", f"{summary} {' '.join(notes)}")
+    else:
+        note = ("success", summary)
+
+    return df.to_json(date_format="iso", orient="split"), None, note, filename
 
 @app.callback(
     Output("upload-note", "children"),
@@ -1111,7 +1140,12 @@ def show_upload_note(note):
     if not note:
         return ""
     level, msg = note
-    color = "danger" if level == "error" else "warning"
+    if level == "error":
+        color = "danger"
+    elif level == "success":
+        color = "success"
+    else:
+        color = "warning"
     return dbc.Alert(msg, color=color, dismissable=True)
 
 # -----------------------
@@ -1789,4 +1823,3 @@ def train_model(
 
 if __name__ == "__main__":
     app.run(debug=False, host="0.0.0.0", port=8050)
-
