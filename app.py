@@ -12,10 +12,20 @@ Hard fixes:
 """
 
 import base64
+import binascii
+from collections import defaultdict, deque
+from datetime import timedelta
+import gzip
 import io
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+import logging
+from pathlib import Path
+import secrets
+import threading
+import time
+from typing import Deque, Dict, List, Optional, Tuple
 import os
+from urllib.parse import urlparse
 
 import numpy as np
 import pandas as pd
@@ -24,6 +34,7 @@ from dash import Dash, dcc, html, Input, Output, State, dash_table, callback_con
 import dash_bootstrap_components as dbc
 import plotly.express as px
 import plotly.graph_objects as go
+from flask import Response, request, session
 
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
 from sklearn.pipeline import Pipeline
@@ -54,6 +65,23 @@ RANDOM_STATE = 42
 MAX_UPLOAD_MB = 50
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 MAX_ROWS_WARN = 300_000
+MAX_COLUMNS = int(os.getenv("PREFLIGHT_MAX_COLUMNS", "2000"))
+MAX_TOTAL_CELLS = int(os.getenv("PREFLIGHT_MAX_TOTAL_CELLS", "5000000"))
+MAX_SERIALIZED_DATA_BYTES = int(os.getenv("PREFLIGHT_MAX_SERIALIZED_DATA_BYTES", "120000000"))
+MAX_TRAIN_ROWS = int(os.getenv("PREFLIGHT_MAX_TRAIN_ROWS", "50000"))
+MAX_TRAIN_ROWS_SVM = int(os.getenv("PREFLIGHT_MAX_TRAIN_ROWS_SVM", "20000"))
+MAX_TRAIN_FEATURES = int(os.getenv("PREFLIGHT_MAX_TRAIN_FEATURES", "500"))
+UPLOAD_RATE_LIMIT_PER_MIN = int(os.getenv("PREFLIGHT_UPLOAD_RATE_LIMIT_PER_MIN", "8"))
+TRAIN_RATE_LIMIT_PER_MIN = int(os.getenv("PREFLIGHT_TRAIN_RATE_LIMIT_PER_MIN", "12"))
+DATA_RETENTION_SECONDS = int(os.getenv("PREFLIGHT_DATA_RETENTION_SECONDS", "7200"))
+DATA_DIR = Path(os.getenv("PREFLIGHT_DATA_DIR", "/tmp/preflight-data"))
+
+LOGGER = logging.getLogger("preflight")
+if not logging.getLogger().handlers:
+    logging.basicConfig(level=logging.INFO)
+RATE_LIMIT_LOCK = threading.Lock()
+RATE_LIMIT_BUCKETS: Dict[Tuple[str, str], Deque[float]] = defaultdict(deque)
+LAST_DATA_CLEANUP_EPOCH = 0.0
 
 CV_METRICS = [
     ("F1 Macro", "f1_macro"),
@@ -64,6 +92,40 @@ BINARY_ONLY_METRICS = [
     ("ROC AUC (binary)", "roc_auc"),
     ("Average Precision (binary)", "average_precision"),
 ]
+
+
+def env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+DEFAULT_REQUIRE_AUTH = "1" if os.getenv("RAILWAY_ENVIRONMENT") else "0"
+REQUIRE_AUTH = env_flag("PREFLIGHT_REQUIRE_AUTH", default=DEFAULT_REQUIRE_AUTH == "1")
+AUTH_USER = os.getenv("PREFLIGHT_AUTH_USER", "")
+AUTH_PASSWORD = os.getenv("PREFLIGHT_AUTH_PASSWORD", "")
+ENFORCE_POST_ORIGIN = env_flag("PREFLIGHT_ENFORCE_POST_ORIGIN", default=True)
+SESSION_COOKIE_SECURE = env_flag(
+    "PREFLIGHT_SESSION_COOKIE_SECURE", default=bool(os.getenv("RAILWAY_ENVIRONMENT"))
+)
+
+CSP_POLICY = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "
+    "font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net data:; "
+    "img-src 'self' data: blob:; "
+    "connect-src 'self'; "
+    "frame-ancestors 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'"
+)
+
+if REQUIRE_AUTH and (not AUTH_USER or not AUTH_PASSWORD):
+    raise RuntimeError(
+        "PREFLIGHT_REQUIRE_AUTH is enabled but PREFLIGHT_AUTH_USER/PREFLIGHT_AUTH_PASSWORD are missing."
+    )
 
 # -----------------------
 # Utilities
@@ -78,7 +140,148 @@ def df_from_store(df_json):
         return None
     if isinstance(df_json, dict):  # orient="split" dict
         return pd.DataFrame(df_json["data"], columns=df_json["columns"], index=df_json["index"])
-    return pd.read_json(df_json, orient="split")
+    if isinstance(df_json, str) and df_json.lstrip().startswith("{"):
+        return pd.read_json(io.StringIO(df_json), orient="split")
+    return load_df_for_session_token(df_json)
+
+
+def _ensure_data_dir() -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(DATA_DIR, 0o700)
+    except OSError:
+        pass
+
+
+def _client_ip() -> str:
+    xff = (request.headers.get("X-Forwarded-For") or "").strip()
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.remote_addr or "unknown"
+
+
+def _allow_action(action: str, limit_per_minute: int) -> bool:
+    now = time.time()
+    cutoff = now - 60
+    key = (_client_ip(), action)
+    with RATE_LIMIT_LOCK:
+        bucket = RATE_LIMIT_BUCKETS[key]
+        while bucket and bucket[0] < cutoff:
+            bucket.popleft()
+        if len(bucket) >= limit_per_minute:
+            return False
+        bucket.append(now)
+    return True
+
+
+def _ensure_session_id() -> str:
+    sid = session.get("sid")
+    if sid:
+        return sid
+    sid = secrets.token_urlsafe(24)
+    session["sid"] = sid
+    session.modified = True
+    return sid
+
+
+def _dataset_path_for_current_session() -> Path:
+    sid = "".join(ch for ch in _ensure_session_id() if ch.isalnum() or ch in "-_")
+    return DATA_DIR / f"{sid}.json.gz"
+
+
+def _cleanup_stale_datasets() -> None:
+    global LAST_DATA_CLEANUP_EPOCH
+    now = time.time()
+    if now - LAST_DATA_CLEANUP_EPOCH < 300:
+        return
+    LAST_DATA_CLEANUP_EPOCH = now
+    cutoff = now - DATA_RETENTION_SECONDS
+    for dataset_path in DATA_DIR.glob("*.json.gz"):
+        try:
+            if dataset_path.stat().st_mtime < cutoff:
+                dataset_path.unlink(missing_ok=True)
+        except OSError:
+            continue
+
+
+def save_df_for_session(df: pd.DataFrame) -> str:
+    payload = df.to_json(date_format="iso", orient="split")
+    encoded = payload.encode("utf-8")
+    if len(encoded) > MAX_SERIALIZED_DATA_BYTES:
+        raise ValueError(
+            "Dataset is too large after parsing. Reduce row/column count and try again."
+        )
+    destination = _dataset_path_for_current_session()
+    temp_path = destination.with_suffix(".tmp")
+    with gzip.open(temp_path, "wb") as f:
+        f.write(encoded)
+    try:
+        os.chmod(temp_path, 0o600)
+    except OSError:
+        pass
+    os.replace(temp_path, destination)
+    token = secrets.token_urlsafe(16)
+    session["dataset_token"] = token
+    session.modified = True
+    return token
+
+
+def load_df_for_session_token(token: str) -> Optional[pd.DataFrame]:
+    if not token:
+        return None
+    expected = session.get("dataset_token")
+    if expected and token != expected:
+        return None
+    dataset_path = _dataset_path_for_current_session()
+    if not dataset_path.exists():
+        return None
+    try:
+        with gzip.open(dataset_path, "rt", encoding="utf-8") as f:
+            payload = f.read()
+        return pd.read_json(io.StringIO(payload), orient="split")
+    except Exception:
+        LOGGER.exception("Failed to load cached dataset for session")
+        return None
+
+
+def _unauthorized_response() -> Response:
+    return Response(
+        "Authentication required.",
+        status=401,
+        headers={"WWW-Authenticate": 'Basic realm="Preflight"'},
+    )
+
+
+def _is_authorized_request() -> bool:
+    auth = request.authorization
+    if not auth:
+        return False
+    username_ok = secrets.compare_digest(auth.username or "", AUTH_USER)
+    password_ok = secrets.compare_digest(auth.password or "", AUTH_PASSWORD)
+    return username_ok and password_ok
+
+
+def _is_same_origin(origin: str) -> bool:
+    try:
+        origin_url = urlparse(origin)
+        host_url = urlparse(request.host_url)
+    except ValueError:
+        return False
+    return origin_url.scheme in {"http", "https"} and origin_url.netloc == host_url.netloc
+
+
+def enforce_dataframe_limits(df: pd.DataFrame) -> pd.DataFrame:
+    rows, cols = df.shape
+    total_cells = rows * cols
+    if cols > MAX_COLUMNS:
+        raise ValueError(
+            f"Too many columns ({cols:,}). Maximum allowed is {MAX_COLUMNS:,}."
+        )
+    if total_cells > MAX_TOTAL_CELLS:
+        raise ValueError(
+            f"Dataset is too large ({total_cells:,} cells). Maximum allowed is {MAX_TOTAL_CELLS:,} cells."
+        )
+    return df
 
 def apply_type_overrides(df: pd.DataFrame, feature_types: Optional[Dict[str, str]]) -> pd.DataFrame:
     """
@@ -107,19 +310,27 @@ def apply_type_overrides(df: pd.DataFrame, feature_types: Optional[Dict[str, str
     return df2
 
 def parse_contents(contents: str, filename: str) -> pd.DataFrame:
-    _, content_string = contents.split(",")
+    try:
+        _, content_string = contents.split(",", 1)
+    except ValueError as exc:
+        raise ValueError("Invalid upload payload.") from exc
     approx_bytes = len(content_string) * 3 // 4
     if approx_bytes > MAX_UPLOAD_BYTES:
         raise ValueError(
             f"File too large (~{approx_bytes // (1024 * 1024):.0f} MB). "
             f"Maximum upload size is {MAX_UPLOAD_MB} MB."
         )
-    decoded = base64.b64decode(content_string)
+    try:
+        decoded = base64.b64decode(content_string, validate=True)
+    except binascii.Error as exc:
+        raise ValueError("Invalid upload payload.") from exc
 
     if filename.lower().endswith(".csv"):
-        return pd.read_csv(io.StringIO(decoded.decode("utf-8", errors="ignore")))
+        df = pd.read_csv(io.StringIO(decoded.decode("utf-8", errors="ignore")), low_memory=False)
+        return enforce_dataframe_limits(df)
     if filename.lower().endswith(".parquet"):
-        return pd.read_parquet(io.BytesIO(decoded))
+        df = pd.read_parquet(io.BytesIO(decoded))
+        return enforce_dataframe_limits(df)
     raise ValueError("Unsupported file type. Upload a CSV or Parquet.")
 
 
@@ -371,7 +582,54 @@ def missingness_heatmap_figure(
 # App + CSS
 # -----------------------
 app = Dash(__name__, external_stylesheets=[dbc.themes.DARKLY])
+server = app.server
 app.title = "Preflight"
+_ensure_data_dir()
+
+default_secret = None if os.getenv("RAILWAY_ENVIRONMENT") else secrets.token_hex(32)
+secret_key = os.getenv("PREFLIGHT_SECRET_KEY", default_secret)
+if not secret_key:
+    raise RuntimeError(
+        "PREFLIGHT_SECRET_KEY is required in deployment environments."
+    )
+
+server.secret_key = secret_key
+server.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SECURE=SESSION_COOKIE_SECURE,
+    SESSION_COOKIE_SAMESITE="Lax",
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
+)
+
+
+@server.before_request
+def security_guard():
+    _ensure_session_id()
+    _cleanup_stale_datasets()
+
+    if REQUIRE_AUTH and not _is_authorized_request():
+        return _unauthorized_response()
+
+    if ENFORCE_POST_ORIGIN and request.method == "POST" and request.path.startswith("/_dash"):
+        origin = request.headers.get("Origin")
+        if origin and not _is_same_origin(origin):
+            return Response("Forbidden origin.", status=403)
+
+    return None
+
+
+@server.after_request
+def add_security_headers(resp):
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("Referrer-Policy", "same-origin")
+    resp.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    resp.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    resp.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
+    resp.headers.setdefault("Content-Security-Policy", CSP_POLICY)
+    if request.headers.get("X-Forwarded-Proto", "").lower() == "https" or request.is_secure:
+        resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return resp
 
 app.index_string = """
 <!DOCTYPE html>
@@ -401,7 +659,7 @@ app.index_string = """
 # -----------------------
 store_block = html.Div(
     [
-        dcc.Store(id="store-df-json"),
+        dcc.Store(id="store-df-json"),  # opaque token only; dataset is cached server-side
         dcc.Store(id="store-target"),
         dcc.Store(id="store-feature-types"),  # {col: type}
         dcc.Store(id="store-eda-page", data=0),  # EDA pagination state
@@ -997,6 +1255,7 @@ app.layout = dbc.Container(
                         "borderRadius": "12px",
                         "textAlign": "center",
                     },
+                    accept=".csv,.parquet",
                     max_size=MAX_UPLOAD_BYTES,
                     multiple=False,
                 ),
@@ -1085,7 +1344,7 @@ def toggle_corr_block(show_vals):
     return {"display": "none"}
 
 # -----------------------
-# Upload: store df json + reset target
+# Upload: store dataset token + reset target
 # (DO NOT write store-feature-types here. One writer only.)
 # -----------------------
 @app.callback(
@@ -1101,18 +1360,23 @@ def on_upload(contents, filename, missing_tokens_str):
     if not contents or not filename:
         return None, None, None, ""
 
+    if not _allow_action("upload", UPLOAD_RATE_LIMIT_PER_MIN):
+        return None, None, ("error", "Upload rate limit exceeded. Please wait and retry."), ""
+
     try:
         df = parse_contents(contents, filename)
     except ValueError as e:
         return None, None, ("error", str(e)), ""
-    except Exception as e:
-        return None, None, ("error", f"Could not read file: {e}"), ""
+    except Exception:
+        LOGGER.exception("Unexpected upload parsing error")
+        return None, None, ("error", "Could not read file. Please upload a valid CSV or Parquet file."), ""
 
     tokens = [t.strip() for t in (missing_tokens_str or "").split(",")]
     df = normalize_missing_tokens(df, tokens)
 
     dup_count = len(df.columns) - len(set(df.columns))
     df = make_unique_columns(df)
+    df = enforce_dataframe_limits(df)
 
     notes = []
     if dup_count > 0:
@@ -1130,7 +1394,15 @@ def on_upload(contents, filename, missing_tokens_str):
     else:
         note = ("success", summary)
 
-    return df.to_json(date_format="iso", orient="split"), None, note, filename
+    try:
+        dataset_token = save_df_for_session(df)
+    except ValueError as e:
+        return None, None, ("error", str(e)), ""
+    except Exception:
+        LOGGER.exception("Failed to persist uploaded dataset")
+        return None, None, ("error", "Upload failed while storing data. Please retry."), ""
+
+    return dataset_token, None, note, filename
 
 @app.callback(
     Output("upload-note", "children"),
@@ -1666,13 +1938,25 @@ def train_model(
     threshold,
     train_cap,
 ):
+    empty_fig = go.Figure()
+
+    if not _allow_action("train", TRAIN_RATE_LIMIT_PER_MIN):
+        return (
+            html.Div("Training rate limit exceeded. Please wait and retry."),
+            empty_fig,
+            empty_fig,
+            empty_fig,
+        )
+
     df = df_from_store(df_json)
     if df is None:
-        return html.Div("Upload data first."), go.Figure(), go.Figure(), go.Figure()
+        return html.Div("Upload data first."), empty_fig, empty_fig, empty_fig
     if not target:
-        return html.Div("Select a target first."), go.Figure(), go.Figure(), go.Figure()
+        return html.Div("Select a target first."), empty_fig, empty_fig, empty_fig
     if not feature_types:
-        return html.Div("Save feature types in Typing tab first."), go.Figure(), go.Figure(), go.Figure()
+        return html.Div("Save feature types in Typing tab first."), empty_fig, empty_fig, empty_fig
+    if target not in df.columns:
+        return html.Div("Selected target is not available in the current dataset."), empty_fig, empty_fig, empty_fig
 
     y_raw = df[target]
     X = df.drop(columns=[target])
@@ -1681,21 +1965,48 @@ def train_model(
     include_features = include_features or keep_cols
     keep_cols = [c for c in keep_cols if c in set(include_features)]
     if len(keep_cols) == 0:
-        return html.Div("No features selected. Use Select all or pick some features."), go.Figure(), go.Figure(), go.Figure()
+        return html.Div("No features selected. Use Select all or pick some features."), empty_fig, empty_fig, empty_fig
+    if len(keep_cols) > MAX_TRAIN_FEATURES:
+        return (
+            html.Div(
+                f"Too many features selected ({len(keep_cols)}). Maximum allowed is {MAX_TRAIN_FEATURES}."
+            ),
+            empty_fig,
+            empty_fig,
+            empty_fig,
+        )
     X = X[keep_cols]
 
     mask = y_raw.notna()
     X = X.loc[mask]
     y_raw = y_raw.loc[mask]
 
-    train_cap = int(train_cap or 0)
-    if train_cap > 0 and len(X) > train_cap:
-        X = X.sample(train_cap, random_state=RANDOM_STATE)
+    requested_cap = int(train_cap or 0)
+    requested_cap = max(requested_cap, 0)
+    hard_cap = MAX_TRAIN_ROWS_SVM if model_choice == "svm" else MAX_TRAIN_ROWS
+    effective_cap = hard_cap
+    if requested_cap > 0:
+        effective_cap = min(requested_cap, hard_cap)
+
+    cap_note = ""
+    if requested_cap > hard_cap:
+        cap_note = f"Requested train cap {requested_cap:,} was reduced to server limit {hard_cap:,}."
+
+    if len(X) > effective_cap:
+        X = X.sample(effective_cap, random_state=RANDOM_STATE)
         y_raw = y_raw.loc[X.index]
+        if cap_note:
+            cap_note += " "
+        cap_note += f"Rows were sampled to {effective_cap:,} for training safety."
 
     classes = sorted(list(pd.Series(y_raw).dropna().unique()))
+    if len(classes) < 2:
+        return html.Div("Need at least 2 non-null target classes to train."), empty_fig, empty_fig, empty_fig
     is_binary = len(classes) == 2
 
+    valid_metrics = {m for _, m in (CV_METRICS + BINARY_ONLY_METRICS)}
+    if cv_metric not in valid_metrics:
+        cv_metric = "f1_macro"
     if (cv_metric in {"roc_auc", "average_precision"}) and not is_binary:
         cv_metric = "f1_macro"
 
@@ -1707,9 +2018,22 @@ def train_model(
         y = pd.factorize(y_raw)[0]
         label_names = [str(c) for c in classes]
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=float(test_size), random_state=RANDOM_STATE, stratify=y
-    )
+    test_size = float(test_size or 0.2)
+    test_size = min(max(test_size, 0.1), 0.4)
+    threshold = float(threshold or 0.5)
+    threshold = min(max(threshold, 0.05), 0.95)
+
+    try:
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=test_size, random_state=RANDOM_STATE, stratify=y
+        )
+    except ValueError:
+        return (
+            html.Div("Could not split data for training. Add more rows per class or adjust the dataset."),
+            empty_fig,
+            empty_fig,
+            empty_fig,
+        )
 
     scale_numeric = "on" in (scale_numeric_val or [])
     if model_choice in {"knn", "svm"}:
@@ -1741,16 +2065,35 @@ def train_model(
         clf = SVC(kernel="rbf", probability=True, class_weight="balanced")
 
     pipe = Pipeline(steps=[("prep", preprocessor), ("clf", clf)])
+    class_counts = pd.Series(y_train).value_counts()
+    if class_counts.empty or int(class_counts.min()) < 2:
+        return (
+            html.Div("Not enough rows per class for stratified CV after preprocessing."),
+            empty_fig,
+            empty_fig,
+            empty_fig,
+        )
 
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
-    cv_scores = cross_val_score(pipe, X_train, y_train, cv=cv, scoring=cv_metric)
+    n_splits = min(5, int(class_counts.min()))
+    n_splits = max(2, n_splits)
+    cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=RANDOM_STATE)
 
-    pipe.fit(X_train, y_train)
+    try:
+        cv_scores = cross_val_score(pipe, X_train, y_train, cv=cv, scoring=cv_metric)
+        pipe.fit(X_train, y_train)
+    except Exception:
+        LOGGER.exception("Model training failed")
+        return (
+            html.Div("Training failed. Try fewer rows/features or a simpler model."),
+            empty_fig,
+            empty_fig,
+            empty_fig,
+        )
 
     y_proba = None
     if hasattr(pipe, "predict_proba") and is_binary:
         y_proba = pipe.predict_proba(X_test)[:, 1]
-        y_pred = (y_proba >= float(threshold)).astype(int)
+        y_pred = (y_proba >= threshold).astype(int)
     else:
         y_pred = pipe.predict(X_test)
 
@@ -1808,9 +2151,12 @@ def train_model(
                 html.H5("Metrics"),
                 html.Div(f"Rows used: {len(X):,}"),
                 html.Div(
-    f"Features used: {len(keep_cols)} | Numeric: {len(num_cols)} | Ordinal: {len(ord_cols)} | Categorical: {len(cat_cols)}"
-),
+                    f"Features used: {len(keep_cols)} | Numeric: {len(num_cols)} | "
+                    f"Ordinal: {len(ord_cols)} | Categorical: {len(cat_cols)}"
+                ),
+                html.Div(f"CV folds: {n_splits}"),
                 html.Div(f"CV metric: {cv_metric} | mean={cv_scores.mean():.3f}, std={cv_scores.std():.3f}"),
+                html.Div(cap_note) if cap_note else html.Div(),
                 html.Div(roc_note),
                 html.H5("Classification Report (holdout)"),
                 html.Pre(rep, style={"whiteSpace": "pre-wrap"}),
