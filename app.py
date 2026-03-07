@@ -113,12 +113,11 @@ SESSION_COOKIE_SECURE = env_flag(
 
 CSP_POLICY = (
     "default-src 'self'; "
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; "
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "
     "font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net data:; "
     "img-src 'self' data: blob:; "
-    "connect-src 'self' blob:; "
-    "worker-src 'self' blob:; "
+    "connect-src 'self'; "
     "frame-ancestors 'none'; "
     "base-uri 'self'; "
     "form-action 'self'"
@@ -616,11 +615,7 @@ def missingness_heatmap_figure(
 # -----------------------
 # App + CSS
 # -----------------------
-app = Dash(
-    __name__, 
-    external_stylesheets=[dbc.themes.DARKLY],
-    suppress_callback_exceptions=False
-)
+app = Dash(__name__, external_stylesheets=[dbc.themes.DARKLY])
 server = app.server
 app.title = "Preflight"
 _ensure_data_dir()
