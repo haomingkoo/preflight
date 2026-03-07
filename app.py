@@ -615,7 +615,12 @@ def missingness_heatmap_figure(
 # -----------------------
 # App + CSS
 # -----------------------
-app = Dash(__name__, external_stylesheets=[dbc.themes.DARKLY])
+app = Dash(
+    __name__, 
+    external_stylesheets=[dbc.themes.DARKLY],
+    serve_locally=True,
+    suppress_callback_exceptions=False
+)
 server = app.server
 app.title = "Preflight"
 _ensure_data_dir()
