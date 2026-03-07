@@ -5,3 +5,13 @@ __pycache__/
 .DS_Store
 *.ipynb_checkpoints/
 .ipynb_checkpoints/
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# Temporary data files
+/tmp/
+*.tmp
