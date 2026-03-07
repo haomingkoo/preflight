@@ -15,6 +15,7 @@ import base64
 import binascii
 from collections import defaultdict, deque
 from datetime import timedelta
+import gc
 import gzip
 import io
 from dataclasses import dataclass
@@ -73,7 +74,7 @@ MAX_TRAIN_ROWS_SVM = int(os.getenv("PREFLIGHT_MAX_TRAIN_ROWS_SVM", "20000"))
 MAX_TRAIN_FEATURES = int(os.getenv("PREFLIGHT_MAX_TRAIN_FEATURES", "500"))
 UPLOAD_RATE_LIMIT_PER_MIN = int(os.getenv("PREFLIGHT_UPLOAD_RATE_LIMIT_PER_MIN", "8"))
 TRAIN_RATE_LIMIT_PER_MIN = int(os.getenv("PREFLIGHT_TRAIN_RATE_LIMIT_PER_MIN", "12"))
-DATA_RETENTION_SECONDS = int(os.getenv("PREFLIGHT_DATA_RETENTION_SECONDS", "7200"))
+DATA_RETENTION_SECONDS = int(os.getenv("PREFLIGHT_DATA_RETENTION_SECONDS", "1800"))
 DATA_DIR = Path(os.getenv("PREFLIGHT_DATA_DIR", "/tmp/preflight-data"))
 
 LOGGER = logging.getLogger("preflight")
@@ -130,6 +131,32 @@ if REQUIRE_AUTH and (not AUTH_USER or not AUTH_PASSWORD):
 # -----------------------
 # Utilities
 # -----------------------
+def log_memory_usage(operation: str, before_mb: Optional[float] = None) -> None:
+    """
+    Log memory usage for monitoring and troubleshooting.
+    
+    Args:
+        operation: Name of the operation (e.g., 'upload', 'eda', 'training')
+        before_mb: Optional memory usage before operation (for delta calculation)
+    """
+    try:
+        import psutil
+        process = psutil.Process()
+        current_mb = process.memory_info().rss / (1024 * 1024)
+        
+        if before_mb is not None:
+            delta = current_mb - before_mb
+            LOGGER.info(f"Memory [{operation}]: {current_mb:.1f} MB (delta: {delta:+.1f} MB)")
+        else:
+            LOGGER.info(f"Memory [{operation}]: {current_mb:.1f} MB")
+    except ImportError:
+        # psutil not available, skip logging
+        pass
+    except Exception:
+        # Don't let memory logging break the app
+        pass
+
+
 def shorten_label(s: str, max_len: int = 18) -> str:
     s = str(s)
     return s if len(s) <= max_len else s[: max_len - 1] + "…"
@@ -196,12 +223,19 @@ def _cleanup_stale_datasets() -> None:
         return
     LAST_DATA_CLEANUP_EPOCH = now
     cutoff = now - DATA_RETENTION_SECONDS
+    deleted_count = 0
     for dataset_path in DATA_DIR.glob("*.json.gz"):
         try:
             if dataset_path.stat().st_mtime < cutoff:
                 dataset_path.unlink(missing_ok=True)
+                deleted_count += 1
         except OSError:
             continue
+    
+    # Trigger garbage collection to release memory from deleted sessions
+    if deleted_count > 0:
+        LOGGER.info(f"Cleaned up {deleted_count} stale dataset(s), triggering GC")
+        gc.collect()
 
 
 def save_df_for_session(df: pd.DataFrame) -> str:
@@ -1402,6 +1436,10 @@ def on_upload(contents, filename, missing_tokens_str):
         LOGGER.exception("Failed to persist uploaded dataset")
         return None, None, ("error", "Upload failed while storing data. Please retry."), ""
 
+    # Explicit memory cleanup after dataframe is saved to disk
+    del df
+    gc.collect()
+    
     return dataset_token, None, note, filename
 
 @app.callback(
@@ -1442,7 +1480,7 @@ def update_health(df_json):
     dup = int(df.duplicated().sum())
     miss_any = float(df.isna().any(axis=1).mean() * 100)
 
-    return (
+    result = (
         f"Rows: {n_rows:,}",
         f"Columns: {n_cols:,}",
         f"Duplicate rows: {dup:,}",
@@ -1450,6 +1488,12 @@ def update_health(df_json):
         prof.to_dict("records"),
         [{"label": c, "value": c} for c in df.columns],
     )
+    
+    # Explicit memory cleanup
+    del df, prof
+    gc.collect()
+    
+    return result
 
 # -----------------------
 # Target selection (DO NOT reset store-feature-types here)
@@ -1768,7 +1812,13 @@ def update_eda_multi(features, cat_mode, scatter_toggle, page, page_size, featur
 
     rows = [dbc.Row(per_feat_cols[i:i + 2], className="mb-2") for i in range(0, len(per_feat_cols), 2)]
     blocks.extend(rows)
-    return html.Div(blocks)
+    result = html.Div(blocks)
+    
+    # Explicit memory cleanup
+    del df
+    gc.collect()
+    
+    return result
 
 @app.callback(
     Output("corr-heatmap", "figure"),
@@ -1853,6 +1903,10 @@ def update_corr(df_json, target, show_vals, method, min_r, top_k, feature_types)
         fig_sc.update_layout(title=f"{a} vs {b} | r={r:.3f}", margin=dict(l=40, r=40, t=60, b=40))
         scatters.append(dbc.Row([dbc.Col(dcc.Graph(figure=fig_sc), md=12)], className="mb-2"))
 
+    # Explicit memory cleanup
+    del df, num_df, corr
+    gc.collect()
+    
     return fig_hm, scatters
 
 # -----------------------
@@ -2164,6 +2218,16 @@ def train_model(
         )
     )
 
+    # Explicit memory cleanup - most important callback for memory usage
+    del df, X, y_raw, X_train, X_test, y_train, y_test, pipe, cv_scores, y_pred
+    if 'y_proba' in locals():
+        del y_proba
+    if 'proba' in locals():
+        del proba
+    if 'cm' in locals():
+        del cm
+    gc.collect()
+    
     return metrics_block, cm_fig, roc_fig, pr_fig
 
 
