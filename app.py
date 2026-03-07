@@ -1489,10 +1489,6 @@ def update_health(df_json):
         [{"label": c, "value": c} for c in df.columns],
     )
     
-    # Explicit memory cleanup
-    del df, prof
-    gc.collect()
-    
     return result
 
 # -----------------------
@@ -1812,13 +1808,7 @@ def update_eda_multi(features, cat_mode, scatter_toggle, page, page_size, featur
 
     rows = [dbc.Row(per_feat_cols[i:i + 2], className="mb-2") for i in range(0, len(per_feat_cols), 2)]
     blocks.extend(rows)
-    result = html.Div(blocks)
-    
-    # Explicit memory cleanup
-    del df
-    gc.collect()
-    
-    return result
+    return html.Div(blocks)
 
 @app.callback(
     Output("corr-heatmap", "figure"),
@@ -1903,10 +1893,6 @@ def update_corr(df_json, target, show_vals, method, min_r, top_k, feature_types)
         fig_sc.update_layout(title=f"{a} vs {b} | r={r:.3f}", margin=dict(l=40, r=40, t=60, b=40))
         scatters.append(dbc.Row([dbc.Col(dcc.Graph(figure=fig_sc), md=12)], className="mb-2"))
 
-    # Explicit memory cleanup
-    del df, num_df, corr
-    gc.collect()
-    
     return fig_hm, scatters
 
 # -----------------------
