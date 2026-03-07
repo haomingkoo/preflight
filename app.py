@@ -619,7 +619,6 @@ def missingness_heatmap_figure(
 app = Dash(
     __name__, 
     external_stylesheets=[dbc.themes.DARKLY],
-    serve_locally=True,
     suppress_callback_exceptions=False
 )
 server = app.server
