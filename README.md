@@ -2,11 +2,9 @@
 
 Preflight is a Dash-based EDA and baseline classification workbench for quick dataset triage and model sanity checks.
 
-## Current Railway deployment (dev)
+[**Try Preflight live**](https://preflight.kooexperience.com/)
 
-Live URL:
-
-`https://preflight-production-7851.up.railway.app/`
+## Deployment
 
 Deployment details in this repo:
 
