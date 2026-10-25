@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import io
 import logging
 import os
 import sys
@@ -50,6 +51,17 @@ def test_on_upload_with_consent_stores_dataset(data_dir: Path, ctx) -> None:
     result = app.on_upload(_csv_upload(), "people.csv", "", [app.CONSENT_VALUE])
 
     assert result[0]
+    assert result[2][0] == "success"
+    assert len(list(data_dir.glob("*.json.gz"))) == 1
+
+
+def test_on_upload_parses_parquet(data_dir: Path, ctx) -> None:
+    buf = io.BytesIO()
+    pd.DataFrame({"name": ["bob", "carol"], "score": [1, 2]}).to_parquet(buf)
+    upload = "data:application/octet-stream;base64," + base64.b64encode(buf.getvalue()).decode()
+
+    result = app.on_upload(upload, "people.parquet", "", [app.CONSENT_VALUE])
+
     assert result[2][0] == "success"
     assert len(list(data_dir.glob("*.json.gz"))) == 1
 
