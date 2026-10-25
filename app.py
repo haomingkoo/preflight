@@ -849,8 +849,7 @@ guide_pane = html.Div(
                 [
                     html.H2("What Preflight does"),
                     html.P(
-                        "Preflight helps you check a dataset and train a quick baseline model. "
-                        "You can use it in class to show the full data workflow from upload to model results."
+                        "Upload a CSV or Parquet file to see its gaps and column types, then train a baseline model."
                     ),
                     html.H3("How to use it"),
                     html.Ol(
@@ -864,7 +863,7 @@ guide_pane = html.Div(
                             html.Li("Use Model to train a baseline and review metrics."),
                         ]
                     ),
-                    html.H3("What each tab teaches"),
+                    html.H3("What each tab shows"),
                     html.Ul(
                         [
                             html.Li("Data Health: basic data quality checks."),
@@ -873,19 +872,6 @@ guide_pane = html.Div(
                             html.Li("EDA: visual exploration for distributions and relationships."),
                             html.Li("Model: quick benchmark model for your current dataset."),
                         ]
-                    ),
-                    html.H3("How the code is organized"),
-                    html.Ul(
-                        [
-                            html.Li([html.Code("app.py"), " contains the layout, callbacks, data prep, and model logic."]),
-                            html.Li([html.Code("wsgi.py"), " exposes ", html.Code("server"), " so Gunicorn can run the app in Railway."]),
-                            html.Li([html.Code("requirements.txt"), " pins library versions for stable behavior."]),
-                            html.Li([html.Code("Dockerfile"), " and ", html.Code("railway.toml"), " define the Railway deployment setup."]),
-                        ]
-                    ),
-                    html.P(
-                        "Teaching tip: start with one small dataset first. "
-                        "Then repeat with a messy dataset so students can compare the results."
                     ),
                 ]
             ),
@@ -1413,12 +1399,14 @@ app.layout = dbc.Container(
                     children=html.Div([
                         html.Span(["Drag a file here or ", html.A("browse")], className="pf-upload-main"),
                         html.Span(f"CSV or Parquet, up to {MAX_UPLOAD_MB} MB", className="pf-upload-meta"),
-                        html.Span("Tick the confirmation below to enable upload.", className="pf-upload-locked"),
+                        html.Span("First tick the box below to confirm you may upload this file.", className="pf-upload-locked"),
                     ]),
                     accept=".csv,.parquet",
                     max_size=MAX_UPLOAD_BYTES,
                     multiple=False,
                     disabled=True,
+                    # dcc.Upload fades to 0.55 opacity when disabled; keep the locked box readable.
+                    style_disabled={"opacity": 1},
                 ),
                 width=12,
             ),
@@ -1494,6 +1482,7 @@ app.layout = dbc.Container(
             [
                 html.A("Privacy", href="/privacy"),
                 html.A("Terms", href="/terms"),
+                html.A("privacy@kooexperience.com", href="mailto:privacy@kooexperience.com"),
             ],
             className="pf-footer",
         ),

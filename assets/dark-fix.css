@@ -183,15 +183,13 @@ pre { font-family: var(--mono); font-size: .8125rem; color: var(--ink-soft); }
   border-color: var(--rule) !important;
   background: var(--surface) !important;
 }
-#upload-data:has(input:disabled) .pf-upload-main { color: var(--ink-mute); }
-#upload-data:has(input:disabled) .pf-upload-main a { color: var(--ink-mute) !important; text-decoration: none; }
+#upload-data:has(input:disabled) .pf-upload-main a { color: var(--ink) !important; text-decoration: none; }
 #upload-data:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 .pf-upload-main { font-size: 1rem; color: var(--ink); font-weight: 500; }
 .pf-upload-main a { color: var(--accent) !important; text-decoration: underline; }
 .pf-upload-meta { display: block; margin-top: var(--s1); font-size: .8125rem; color: var(--ink-mute); }
-.pf-upload-locked { display: none; margin-top: var(--s1); font-size: .8125rem; color: var(--ink-soft); }
+.pf-upload-locked { display: none; margin-top: var(--s2); font-size: .875rem; font-weight: 500; color: var(--warning); }
 #upload-data:has(input:disabled) .pf-upload-locked { display: block; }
-#upload-data:has(input:disabled) .pf-upload-meta { display: none; }
 
 .pf-consent { margin-top: var(--s3); }
 .pf-consent label {
@@ -672,6 +670,7 @@ textarea:focus {
 /* ── Footer ──────────────────────────────────────────────── */
 .pf-footer {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--s5);
   padding: var(--s5) 0 var(--s6);
   margin-top: var(--s7);
