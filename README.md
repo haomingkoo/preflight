@@ -110,3 +110,12 @@ Environment variables used by the app:
 - `PREFLIGHT_MAX_TRAIN_ROWS`: server-side train row cap (default `50000`)
 - `PREFLIGHT_MAX_TRAIN_ROWS_SVM`: tighter train row cap for SVM (default `20000`)
 - `PREFLIGHT_MAX_TRAIN_FEATURES`: maximum selected features for training (default `500`)
+- `PREFLIGHT_DATA_RETENTION_SECONDS`: delete uploaded datasets this long after upload (default `1800`)
+- `PREFLIGHT_CLEANUP_INTERVAL_SECONDS`: how often the background cleanup runs (default `60`)
+
+Privacy defaults:
+
+- Uploading requires ticking a consent box. The upload callback also refuses requests without it.
+- "Delete my data now" removes the session's file at once. A background thread deletes expired files even with no traffic.
+- Errors are logged as exception type plus request id only. Gunicorn access logs are off.
+- Fonts and Bootstrap CSS are self-hosted under `assets/`. `/privacy` and `/terms` describe all of this.

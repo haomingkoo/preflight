@@ -2,8 +2,19 @@
    Preflight — portfolio-matched dark theme
    ========================================================= */
 
+/* ── Fonts (self-hosted, no third-party requests) ─────────── */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('fonts/inter-latin-wght-normal.woff2') format('woff2');
+}
+
 /* ── Palette ─────────────────────────────────────────────── */
 :root {
+  --bs-font-sans-serif: 'Inter', system-ui, sans-serif;
+  --bs-body-font-family: 'Inter', system-ui, sans-serif;
   --bg:        #080808;
   --surface:   #111111;
   --border:    #1e1e1e;
@@ -313,4 +324,55 @@ label {
 .dash-spreadsheet-container .Select-menu-outer * {
   color: var(--text) !important;
   background-color: var(--surface) !important;
+}
+
+/* ── Upload consent, notice, delete, footer ──────────────── */
+.pf-consent label {
+  display: flex !important;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--text) !important;
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  letter-spacing: normal !important;
+  text-transform: none !important;
+  line-height: 1.5;
+  cursor: pointer;
+  padding: 6px 0;
+}
+.pf-consent input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  flex: none;
+  accent-color: var(--accent);
+}
+.pf-upload-notice {
+  color: #a1a1aa;
+  font-size: 13px;
+  margin: 4px 0 10px;
+}
+.pf-upload-notice a,
+.pf-footer a {
+  color: #7aa7ff !important;
+  text-underline-offset: 3px;
+}
+#upload-data[aria-disabled="true"],
+#upload-data:has(input:disabled) {
+  opacity: .55;
+  cursor: not-allowed;
+}
+#btn-delete-data {
+  background: transparent !important;
+  color: #fca5a5 !important;
+  border: 1px solid rgba(252,165,165,.4) !important;
+  margin-bottom: 16px;
+}
+.pf-footer {
+  display: flex;
+  gap: 20px;
+  padding: 32px 0 40px;
+  margin-top: 32px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
 }
