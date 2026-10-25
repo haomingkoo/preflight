@@ -11,19 +11,25 @@ _PAGE = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>{title} · Preflight</title>
 <style>
-@font-face {{ font-family: 'Inter'; font-weight: 100 900; font-display: swap;
-  src: url('/assets/fonts/inter-latin-wght-normal.woff2') format('woff2'); }}
+@font-face {{ font-family: 'Hanken Grotesk'; font-weight: 100 900; font-display: swap;
+  src: url('/assets/fonts/hanken-grotesk-latin-wght-normal.woff2') format('woff2'); }}
 :root {{ color-scheme: dark; }}
-body {{ margin: 0; background: #080808; color: #f0f0f0;
-  font: 16px/1.65 'Inter', system-ui, sans-serif; }}
-.legal {{ max-width: 68ch; margin: 0 auto; padding: 48px 20px 64px; }}
-h1 {{ font-size: 2rem; line-height: 1.15; letter-spacing: -0.02em; margin: 24px 0 4px; }}
-h2 {{ font-size: 1.15rem; margin: 2.2em 0 0.4em; }}
-a {{ color: #7aa7ff; text-underline-offset: 3px; }}
-a:focus-visible {{ outline: 2px solid #7aa7ff; outline-offset: 3px; border-radius: 2px; }}
-.legal-meta, .legal-back, .legal-footer {{ color: #a1a1aa; font-size: 0.875rem; }}
-.legal-footer {{ margin-top: 48px; }}
-li {{ margin: 0.35em 0; }}
+body {{ margin: 0; background: #04050a; color: #f4f4f6;
+  font: 1rem/1.65 'Hanken Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased; }}
+::selection {{ background: #5b8efb; color: #04050a; }}
+.legal {{ max-width: 68ch; margin: 0 auto; padding: 3rem 1.25rem 4rem; }}
+h1 {{ font-size: 2.25rem; line-height: 1.1; letter-spacing: -0.025em; font-weight: 650; margin: 1.5rem 0 0.25rem; }}
+h2 {{ font-size: 1.125rem; line-height: 1.3; font-weight: 600; margin: 2.25em 0 0.5em; }}
+p, li {{ color: #b9bbc2; text-wrap: pretty; }}
+strong {{ color: #f4f4f6; font-weight: 600; }}
+a {{ color: #5b8efb; text-underline-offset: 3px; }}
+a:hover {{ color: #8eb6f8; }}
+a:focus-visible {{ outline: 2px solid #5b8efb; outline-offset: 3px; border-radius: 2px; }}
+.legal-back a, .legal-footer a {{ display: inline-flex; align-items: center; min-height: 44px; }}
+.legal-meta, .legal-back, .legal-footer {{ color: #9b9ea7; font-size: 0.875rem; margin: 0; }}
+.legal-footer {{ margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid rgba(244,244,246,0.1); }}
+li {{ margin: 0.4em 0; }}
 </style>
 </head>
 <body>
