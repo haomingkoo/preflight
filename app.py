@@ -23,6 +23,7 @@ import logging
 from pathlib import Path
 import secrets
 import threading
+import textwrap
 import time
 from typing import Deque, Dict, List, Optional, Tuple
 import os
@@ -35,6 +36,7 @@ from dash import Dash, dcc, html, Input, Output, State, dash_table, callback_con
 import dash_bootstrap_components as dbc
 import plotly.express as px
 import plotly.graph_objects as go
+import plotly.io as pio
 from flask import Response, g, request, session
 
 import legal
@@ -571,7 +573,7 @@ def fig_confusion_matrix(cm: np.ndarray, labels: List[str]) -> go.Figure:
         title="Confusion Matrix",
         template="plotly_dark",
     )
-    fig.update_layout(margin=dict(l=40, r=40, t=60, b=40))
+    fig.update_layout(height=CHART_HEIGHT, margin=dict(l=40, r=40, t=60, b=40))
     return fig
 
 
@@ -587,6 +589,7 @@ def fig_roc_pr(y_true: np.ndarray, y_proba: np.ndarray) -> Tuple[go.Figure, go.F
     fig_roc.add_trace(go.Scatter(x=fpr, y=tpr, mode="lines", name=f"ROC AUC={roc_auc:.3f}"))
     fig_roc.add_trace(go.Scatter(x=[0, 1], y=[0, 1], mode="lines", name="Chance", line=dict(dash="dash")))
     fig_roc.update_layout(
+        height=CHART_HEIGHT,
         title="ROC Curve",
         template="plotly_dark",
         xaxis_title="False Positive Rate",
@@ -597,6 +600,7 @@ def fig_roc_pr(y_true: np.ndarray, y_proba: np.ndarray) -> Tuple[go.Figure, go.F
     fig_pr = go.Figure()
     fig_pr.add_trace(go.Scatter(x=rec, y=prec, mode="lines", name=f"PR AUC={pr_auc:.3f}, AP={ap:.3f}"))
     fig_pr.update_layout(
+        height=CHART_HEIGHT,
         title="Precision-Recall Curve",
         template="plotly_dark",
         xaxis_title="Recall",
@@ -615,7 +619,7 @@ def missingness_heatmap_figure(
 ) -> go.Figure:
     if df is None or len(df) == 0:
         fig = go.Figure()
-        fig.update_layout(template="plotly_dark", title="Missingness Matrix")
+        fig.update_layout(height=CHART_HEIGHT, template="plotly_dark", title="Missingness Matrix")
         return fig
 
     seed = int(seed or 42)
@@ -682,6 +686,45 @@ def missingness_heatmap_figure(
         height=520,
     )
     return fig
+
+# -----------------------
+# Chart theme: plotly_dark tuned to the page tokens, used by every figure
+# -----------------------
+CHART_FONT = "Hanken Grotesk, system-ui, -apple-system, Segoe UI, sans-serif"
+CHART_INK = "#b9bbc2"
+CHART_GRID = "rgba(244,244,246,0.08)"
+# Explicit heights: dcc.Graph otherwise keeps the size of the previous figure (e.g. a short placeholder).
+CHART_HEIGHT = 450
+PLACEHOLDER_HEIGHT = 160
+_dark = pio.templates["plotly_dark"]
+_dark.layout.update(
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    font=dict(family=CHART_FONT, color=CHART_INK, size=13),
+    title=dict(font=dict(size=15, color="#f4f4f6"), x=0, xanchor="left", pad=dict(l=4)),
+    colorway=["#5b8efb", "#f59e0b", "#34d399", "#f472b6", "#a78bfa", "#22d3ee", "#fb7185", "#a3e635"],
+    hoverlabel=dict(bgcolor="#11141d", bordercolor="rgba(244,244,246,0.18)", font=dict(family=CHART_FONT, color="#f4f4f6")),
+    legend=dict(bgcolor="rgba(0,0,0,0)"),
+)
+_dark.layout.xaxis.update(gridcolor=CHART_GRID, zerolinecolor=CHART_GRID, linecolor=CHART_GRID)
+_dark.layout.yaxis.update(gridcolor=CHART_GRID, zerolinecolor=CHART_GRID, linecolor=CHART_GRID)
+pio.templates.default = "plotly_dark"
+
+
+def placeholder_fig(message: str) -> go.Figure:
+    """Empty-state chart: a short sentence instead of a blank grid."""
+    fig = go.Figure()
+    fig.update_layout(
+        height=PLACEHOLDER_HEIGHT,
+        template="plotly_dark",
+        margin=dict(l=8, r=8, t=8, b=8),
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+        annotations=[dict(text="<br>".join(textwrap.wrap(message, 34)), showarrow=False, font=dict(size=14, color="#9b9ea7"),
+                          xref="paper", yref="paper", x=0.5, y=0.5)],
+    )
+    return fig
+
 
 # -----------------------
 # App + CSS
@@ -762,12 +805,13 @@ def terms_page() -> Response:
 
 app.index_string = """
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
     {%metas%}
     <title>{%title%}</title>
     {%favicon%}
-    <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <meta name="theme-color" content="#04050a" />
+    <link rel="preload" href="/assets/fonts/hanken-grotesk-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
     {%css%}
   </head>
   <body>
@@ -803,12 +847,12 @@ guide_pane = html.Div(
         dbc.Card(
             dbc.CardBody(
                 [
-                    html.H4("Guide: What this app does"),
+                    html.H2("What Preflight does"),
                     html.P(
                         "Preflight helps you check a dataset and train a quick baseline model. "
                         "You can use it in class to show the full data workflow from upload to model results."
                     ),
-                    html.H5("How to use it"),
+                    html.H3("How to use it"),
                     html.Ol(
                         [
                             html.Li("Upload a CSV or Parquet file at the top."),
@@ -820,7 +864,7 @@ guide_pane = html.Div(
                             html.Li("Use Model to train a baseline and review metrics."),
                         ]
                     ),
-                    html.H5("What each tab teaches"),
+                    html.H3("What each tab teaches"),
                     html.Ul(
                         [
                             html.Li("Data Health: basic data quality checks."),
@@ -830,13 +874,13 @@ guide_pane = html.Div(
                             html.Li("Model: quick benchmark model for your current dataset."),
                         ]
                     ),
-                    html.H5("How the code is organized"),
+                    html.H3("How the code is organized"),
                     html.Ul(
                         [
-                            html.Li("`app.py` contains the layout, callbacks, data prep, and model logic."),
-                            html.Li("`wsgi.py` exposes `server` so Gunicorn can run the app in Railway."),
-                            html.Li("`requirements.txt` pins library versions for stable behavior."),
-                            html.Li("`Dockerfile` and `railway.toml` define the Railway deployment setup."),
+                            html.Li([html.Code("app.py"), " contains the layout, callbacks, data prep, and model logic."]),
+                            html.Li([html.Code("wsgi.py"), " exposes ", html.Code("server"), " so Gunicorn can run the app in Railway."]),
+                            html.Li([html.Code("requirements.txt"), " pins library versions for stable behavior."]),
+                            html.Li([html.Code("Dockerfile"), " and ", html.Code("railway.toml"), " define the Railway deployment setup."]),
                         ]
                     ),
                     html.P(
@@ -856,16 +900,16 @@ health_pane = html.Div(
         dbc.Card(
             dbc.CardBody(
                 [
-                    dbc.Row(
+                    html.Div(
                         [
-                            dbc.Col(html.Div(id="health-rows"), md=3),
-                            dbc.Col(html.Div(id="health-cols"), md=3),
-                            dbc.Col(html.Div(id="health-dups"), md=3),
-                            dbc.Col(html.Div(id="health-miss-any"), md=3),
+                            html.Div(id="health-rows"),
+                            html.Div(id="health-cols"),
+                            html.Div(id="health-dups"),
+                            html.Div(id="health-miss-any"),
                         ],
-                        className="mb-3",
+                        className="pf-stats",
                     ),
-                    html.H5("Column Summary"),
+                    html.H2("Column Summary"),
                     dash_table.DataTable(
                         id="health-profile-table",
                         data=[],
@@ -927,7 +971,7 @@ missing_pane = html.Div(
         dbc.Card(
             dbc.CardBody(
                 [
-                    html.H5("Missingness"),
+                    html.H2("Missingness"),
                     dbc.Row(
                         [
                             dbc.Col(
@@ -969,8 +1013,8 @@ missing_pane = html.Div(
                         className="mb-2",
                     ),
                     html.Div(id="missing-sample-label", className="mb-2"),
-                    dcc.Graph(id="missing-matrix-fig"),
-                    dcc.Graph(id="missing-bar-fig"),
+                    dcc.Graph(id="missing-matrix-fig", figure=placeholder_fig("Upload a dataset to see where values are missing.")),
+                    dcc.Graph(id="missing-bar-fig", figure=placeholder_fig("Missing values per column appear here.")),
                 ]
             ),
             className="mt-3",
@@ -1022,9 +1066,9 @@ typing_pane = html.Div(
                                 dcc.Loading(
                                     id="loading-typing",
                                     type="default",
-                                    color="#3b82f6",
+                                    color="#5b8efb",
                                     children=[
-                                        html.H5("Typing Table (edit overrides)"),
+                                        html.H2("Typing Table (edit overrides)"),
                                         dash_table.DataTable(
                                             id="typing-table",
                                             data=[],
@@ -1155,13 +1199,13 @@ eda_pane = html.Div(
                     dcc.Loading(
                         id="loading-eda",
                         type="default",
-                        color="#3b82f6",
+                        color="#5b8efb",
                         children=[
                             html.Div(
                                 id="corr-block",
                                 children=[
                                     html.Hr(),
-                                    html.H5("Correlation (numeric only)"),
+                                    html.H2("Correlation (numeric only)"),
                                     dbc.Row(
                                         [
                                             dbc.Col(
@@ -1209,7 +1253,7 @@ eda_pane = html.Div(
                                         ],
                                         className="mb-2",
                                     ),
-                                    dcc.Graph(id="corr-heatmap"),
+                                    dcc.Graph(id="corr-heatmap", figure=placeholder_fig("Upload a dataset and pick a target to see correlations.")),
                                     html.Div(id="corr-scatter-container"),
                                 ],
                             ),
@@ -1313,16 +1357,17 @@ model_pane = html.Div(
                     dcc.Loading(
                         id="loading-train",
                         type="default",
+                        color="#5b8efb",
                         children=[
                             html.Div(id="model-metrics", className="mb-3"),
                             dbc.Row(
                                 [
-                                    dbc.Col(dcc.Graph(id="cm-graph"), md=6),
-                                    dbc.Col(dcc.Graph(id="roc-graph"), md=6),
+                                    dbc.Col(dcc.Graph(id="cm-graph", figure=placeholder_fig("Train a model to see the confusion matrix.")), md=6),
+                                    dbc.Col(dcc.Graph(id="roc-graph", figure=placeholder_fig("Train a model to see the ROC curve.")), md=6),
                                 ]
                             ),
                             html.Div(style={"height": "12px"}),
-                            dcc.Graph(id="pr-graph"),
+                            dcc.Graph(id="pr-graph", figure=placeholder_fig("Train a model to see the precision-recall curve.")),
                         ],
                     ),
                 ]
@@ -1355,7 +1400,7 @@ app.layout = dbc.Container(
             [
                 html.H1("Preflight", className="pf-hero-title"),
                 html.P(
-                    "Upload any CSV or Parquet — data health, EDA, correlation maps, and baseline ML models in one pass.",
+                    "Upload a CSV or Parquet file. Get data health, EDA, correlation maps and baseline ML models in one pass.",
                     className="pf-hero-sub",
                 ),
             ],
@@ -1366,22 +1411,10 @@ app.layout = dbc.Container(
                 dcc.Upload(
                     id="upload-data",
                     children=html.Div([
-                        "Drag and drop or ",
-                        html.A("browse"),
-                        html.Span(
-                            f" · CSV or Parquet · max {MAX_UPLOAD_MB} MB",
-                            style={"color": "var(--muted)", "fontSize": "13px"},
-                        ),
+                        html.Span(["Drag a file here or ", html.A("browse")], className="pf-upload-main"),
+                        html.Span(f"CSV or Parquet, up to {MAX_UPLOAD_MB} MB", className="pf-upload-meta"),
+                        html.Span("Tick the confirmation below to enable upload.", className="pf-upload-locked"),
                     ]),
-                    style={
-                        "width": "100%",
-                        "height": "64px",
-                        "lineHeight": "64px",
-                        "borderWidth": "1px",
-                        "borderStyle": "dashed",
-                        "borderRadius": "12px",
-                        "textAlign": "center",
-                    },
                     accept=".csv,.parquet",
                     max_size=MAX_UPLOAD_BYTES,
                     multiple=False,
@@ -1389,7 +1422,6 @@ app.layout = dbc.Container(
                 ),
                 width=12,
             ),
-            className="mb-2",
         ),
         dcc.Checklist(
             id="upload-consent",
@@ -1397,22 +1429,27 @@ app.layout = dbc.Container(
             value=[],
             className="pf-consent",
         ),
-        html.P(
+        html.Div(
             [
-                "Your file is processed on our server (Railway, behind Cloudflare) only to produce this analysis. "
-                f"It is deleted {DATA_RETENTION_SECONDS // 60} minutes after upload, or right away if you use "
-                "Delete my data now. It is never shared or used for anything else. ",
-                html.A("Privacy", href="/privacy", target="_blank", rel="noopener"),
-                " · ",
-                html.A("Terms", href="/terms", target="_blank", rel="noopener"),
+                html.P(
+                    [
+                        "Your file is processed on our server (Railway, behind Cloudflare) only to produce this analysis. "
+                        f"It is deleted {DATA_RETENTION_SECONDS // 60} minutes after upload, or right away if you use "
+                        "Delete my data now. It is never shared or used for anything else. ",
+                        html.A("Privacy", href="/privacy", target="_blank", rel="noopener"),
+                        " · ",
+                        html.A("Terms", href="/terms", target="_blank", rel="noopener"),
+                    ],
+                    className="pf-upload-notice",
+                ),
+                html.Button("Delete my data now", id="btn-delete-data", n_clicks=0, className="pf-delete-btn"),
             ],
-            className="pf-upload-notice",
+            className="pf-upload-row",
         ),
-        html.Button("Delete my data now", id="btn-delete-data", n_clicks=0, className="pf-delete-btn"),
         dcc.Loading(
             id="loading-upload",
             type="default",
-            color="#3b82f6",
+            color="#5b8efb",
             children=html.Div(
                 [
                     html.Div(id="upload-loading-anchor", style={"display": "none"}),
@@ -1420,22 +1457,25 @@ app.layout = dbc.Container(
                 ]
             ),
         ),
-        dbc.Row(
-            dbc.Col(
-                [
-                    html.Label("Missing tokens (comma-separated)"),
-                    dcc.Input(
-                        id="missing-tokens",
-                        type="text",
-                        value=",".join(MISSING_TOKENS_DEFAULT),
-                        style={"width": "100%"},
-                    ),
-                ],
-                width=12,
-            ),
-            className="mb-3",
+        html.Details(
+            [
+                html.Summary("Advanced: missing value tokens"),
+                html.Div(
+                    [
+                        html.Label("Missing tokens (comma-separated)", htmlFor="missing-tokens"),
+                        dcc.Input(
+                            id="missing-tokens",
+                            type="text",
+                            value=",".join(MISSING_TOKENS_DEFAULT),
+                            style={"width": "100%"},
+                        ),
+                        html.P("Cells matching these values are treated as missing. Set them before you upload.", className="pf-hint"),
+                    ],
+                    className="pf-advanced-body",
+                ),
+            ],
+            className="pf-advanced",
         ),
-        html.Hr(),
         store_block,
         dcc.Tabs(
             id="tabs",
@@ -1626,6 +1666,10 @@ def show_upload_note(note):
 # -----------------------
 # Data Health: profile + dropdown options
 # -----------------------
+def _stat(label: str, value: str) -> list:
+    return [html.Span(label, className="pf-stat-label"), html.Span(value, className="pf-stat-value")]
+
+
 @app.callback(
     Output("health-rows", "children"),
     Output("health-cols", "children"),
@@ -1646,10 +1690,10 @@ def update_health(df_json):
     miss_any = float(df.isna().any(axis=1).mean() * 100)
 
     result = (
-        f"Rows: {n_rows:,}",
-        f"Columns: {n_cols:,}",
-        f"Duplicate rows: {dup:,}",
-        f"Rows with any missing: {miss_any:.1f}%",
+        _stat("Rows", f"{n_rows:,}"),
+        _stat("Columns", f"{n_cols:,}"),
+        _stat("Duplicate rows", f"{dup:,}"),
+        _stat("Rows with any missing", f"{miss_any:.1f}%"),
         prof.to_dict("records"),
         [{"label": c, "value": c} for c in df.columns],
     )
@@ -1748,7 +1792,11 @@ def configure_missing_slider(df_json):
 def update_missingness(df_json, sample_n, seed, col_mode, top_n):
     df = df_from_store(df_json)
     if df is None:
-        return go.Figure(), go.Figure(), ""
+        return (
+            placeholder_fig("Upload a dataset to see where values are missing."),
+            placeholder_fig("Missing values per column appear here."),
+            "",
+        )
 
     seed = int(seed or 42)
     sample_n = int(sample_n or min(5000, len(df)))
@@ -1761,7 +1809,7 @@ def update_missingness(df_json, sample_n, seed, col_mode, top_n):
 
     if len(miss_pct) == 0:
         bar_fig = go.Figure()
-        bar_fig.update_layout(template="plotly_dark", title="Top Missing Columns (up to 25)")
+        bar_fig.update_layout(height=CHART_HEIGHT, template="plotly_dark", title="Top Missing Columns (up to 25)")
     else:
         bar_fig = px.bar(
             x=miss_pct.values,
@@ -1772,7 +1820,7 @@ def update_missingness(df_json, sample_n, seed, col_mode, top_n):
             template="plotly_dark",
         )
         bar_fig.update_yaxes(categoryorder="total ascending")
-        bar_fig.update_layout(margin=dict(l=220, r=40, t=60, b=40))
+        bar_fig.update_layout(height=CHART_HEIGHT, margin=dict(l=220, r=40, t=60, b=40))
 
     label = f"Matrix uses {min(sample_n, len(df)):,} sampled rows (seed={seed}). Hover shows full column names."
     return matrix_fig, bar_fig, label
@@ -1908,7 +1956,7 @@ def update_eda_multi(features, cat_mode, scatter_toggle, page, page_size, featur
         if len(numeric_selected) == 2:
             x, y = numeric_selected
             fig_sc = px.scatter(df, x=x, y=y, color=target, template="plotly_dark")
-            fig_sc.update_layout(title=f"Scatter: {x} vs {y} by {target}", margin=dict(l=40, r=40, t=60, b=40))
+            fig_sc.update_layout(height=CHART_HEIGHT, title=f"Scatter: {x} vs {y} by {target}", margin=dict(l=40, r=40, t=60, b=40))
             blocks.append(dbc.Row([dbc.Col(dcc.Graph(figure=fig_sc), md=12)], className="mb-2"))
 
     page = int(page or 0)
@@ -1925,13 +1973,13 @@ def update_eda_multi(features, cat_mode, scatter_toggle, page, page_size, featur
 
         if pd.api.types.is_numeric_dtype(df[feat]):
             fig = px.histogram(df, x=feat, color=target, barmode="overlay", marginal="box", template="plotly_dark")
-            fig.update_layout(title=f"{feat} distribution by {target}", margin=dict(l=40, r=40, t=60, b=40))
+            fig.update_layout(height=CHART_HEIGHT, title=f"{feat} distribution by {target}", margin=dict(l=40, r=40, t=60, b=40))
             per_feat_cols.append(dbc.Col(dcc.Graph(figure=fig), md=6))
         else:
             tmp = df[[feat, target]].dropna()
             if tmp.empty:
                 fig = go.Figure()
-                fig.update_layout(template="plotly_dark", title=f"{feat}: no non-null rows")
+                fig.update_layout(height=CHART_HEIGHT, template="plotly_dark", title=f"{feat}: no non-null rows")
                 per_feat_cols.append(dbc.Col(dcc.Graph(figure=fig), md=6))
                 continue
 
@@ -1967,7 +2015,7 @@ def update_eda_multi(features, cat_mode, scatter_toggle, page, page_size, featur
                     hover_data={feat: True, "feat_short": False, "rate": True, target: True},
                 )
 
-            fig.update_layout(margin=dict(l=40, r=40, t=60, b=140))
+            fig.update_layout(height=CHART_HEIGHT, margin=dict(l=40, r=40, t=60, b=140))
             fig.update_xaxes(tickangle=45)
             per_feat_cols.append(dbc.Col(dcc.Graph(figure=fig), md=6))
 
@@ -1990,13 +2038,13 @@ def update_eda_multi(features, cat_mode, scatter_toggle, page, page_size, featur
 def update_corr(df_json, target, show_vals, method, min_r, top_k, feature_types):
     if "on" not in (show_vals or []):
         fig = go.Figure()
-        fig.update_layout(template="plotly_dark", title="Correlation (hidden)")
+        fig.update_layout(height=CHART_HEIGHT, template="plotly_dark", title="Correlation (hidden)")
         return fig, []
 
     df = df_from_store(df_json)
     if df is None or not target:
         fig = go.Figure()
-        fig.update_layout(template="plotly_dark", title="Correlation Matrix")
+        fig.update_layout(height=CHART_HEIGHT, template="plotly_dark", title="Correlation Matrix")
         return fig, []
 
     feature_types = feature_types or {}
@@ -2013,7 +2061,7 @@ def update_corr(df_json, target, show_vals, method, min_r, top_k, feature_types)
 
     if len(corr_cols) < 2:
         fig = go.Figure()
-        fig.update_layout(template="plotly_dark", title="Correlation Matrix (need ≥ 2 numeric/ordinal features)")
+        fig.update_layout(height=CHART_HEIGHT, template="plotly_dark", title="Correlation Matrix (need ≥ 2 numeric/ordinal features)")
         return fig, []
 
     # Ensure columns are numeric for correlation computation
@@ -2021,7 +2069,7 @@ def update_corr(df_json, target, show_vals, method, min_r, top_k, feature_types)
 
     if num_df.shape[1] < 2:
         fig = go.Figure()
-        fig.update_layout(template="plotly_dark", title="Correlation Matrix (need ≥ 2 usable numeric columns)")
+        fig.update_layout(height=CHART_HEIGHT, template="plotly_dark", title="Correlation Matrix (need ≥ 2 usable numeric columns)")
         return fig, []
 
     method = method or "spearman"
@@ -2033,7 +2081,7 @@ def update_corr(df_json, target, show_vals, method, min_r, top_k, feature_types)
         template="plotly_dark",
         title=f"{method.title()} correlation (typed numeric only)",
     )
-    fig_hm.update_layout(margin=dict(l=40, r=40, t=60, b=40))
+    fig_hm.update_layout(height=CHART_HEIGHT, margin=dict(l=40, r=40, t=60, b=40))
 
     min_r = float(min_r or 0.5)
     top_k = int(top_k or 10)
@@ -2055,7 +2103,7 @@ def update_corr(df_json, target, show_vals, method, min_r, top_k, feature_types)
         if tmp.empty:
             continue
         fig_sc = px.scatter(tmp, x=a, y=b, color=target, template="plotly_dark")
-        fig_sc.update_layout(title=f"{a} vs {b} | r={r:.3f}", margin=dict(l=40, r=40, t=60, b=40))
+        fig_sc.update_layout(height=CHART_HEIGHT, title=f"{a} vs {b} | r={r:.3f}", margin=dict(l=40, r=40, t=60, b=40))
         scatters.append(dbc.Row([dbc.Col(dcc.Graph(figure=fig_sc), md=12)], className="mb-2"))
 
     return fig_hm, scatters
@@ -2143,7 +2191,7 @@ def train_model(
     threshold,
     train_cap,
 ):
-    empty_fig = go.Figure()
+    empty_fig = placeholder_fig("Train a model to see this chart.")
 
     if not _allow_action("train", TRAIN_RATE_LIMIT_PER_MIN):
         return (
@@ -2329,6 +2377,7 @@ def train_model(
             )
 
             roc_fig.update_layout(
+                height=CHART_HEIGHT,
                 title=f"ROC Curve (OvR, macro AUC={roc_auc_macro:.3f})",
                 template="plotly_dark",
                 xaxis_title="False Positive Rate",
@@ -2337,36 +2386,36 @@ def train_model(
             )
 
             # Keep PR empty for now (optional to implement later)
-            pr_fig = go.Figure()
-            pr_fig.update_layout(
-                title="Precision-Recall Curve (multiclass not implemented)",
-                template="plotly_dark",
-                margin=dict(l=40, r=40, t=60, b=40),
-            )
+            pr_fig = placeholder_fig("The precision-recall curve is shown for binary targets only.")
 
             roc_note = f"Multiclass ROC-AUC (OvR macro)={roc_auc_macro:.3f}"
     else:
-        roc_fig = go.Figure()
-        pr_fig = go.Figure()
-        roc_note = "ROC/PR requires predict_proba."
+        no_proba = "This model does not output probabilities, so this curve is unavailable."
+        roc_fig = placeholder_fig(no_proba)
+        pr_fig = placeholder_fig(no_proba)
+        roc_note = "ROC and PR curves need a model that outputs probabilities."
 
-    metrics_block = dbc.Card(
-        dbc.CardBody(
-            [
-                html.H5("Metrics"),
-                html.Div(f"Rows used: {len(X):,}"),
-                html.Div(
-                    f"Features used: {len(keep_cols)} | Numeric: {len(num_cols)} | "
-                    f"Ordinal: {len(ord_cols)} | Categorical: {len(cat_cols)}"
-                ),
-                html.Div(f"CV folds: {n_splits}"),
-                html.Div(f"CV metric: {cv_metric} | mean={cv_scores.mean():.3f}, std={cv_scores.std():.3f}"),
-                html.Div(cap_note) if cap_note else html.Div(),
-                html.Div(roc_note),
-                html.H5("Classification Report (holdout)"),
-                html.Pre(rep, style={"whiteSpace": "pre-wrap"}),
-            ]
-        )
+    metrics_block = html.Div(
+        [
+            html.H3("Metrics"),
+            html.Div(
+                [
+                    html.Div(f"Rows used: {len(X):,}"),
+                    html.Div(
+                        f"Features used: {len(keep_cols)} | Numeric: {len(num_cols)} | "
+                        f"Ordinal: {len(ord_cols)} | Categorical: {len(cat_cols)}"
+                    ),
+                    html.Div(f"CV folds: {n_splits}"),
+                    html.Div(f"CV metric: {cv_metric} | mean={cv_scores.mean():.3f}, std={cv_scores.std():.3f}"),
+                    html.Div(cap_note) if cap_note else html.Div(),
+                    html.Div(roc_note),
+                ],
+                className="pf-metrics-list",
+            ),
+            html.H3("Classification report (holdout)"),
+            html.Pre(rep, style={"whiteSpace": "pre-wrap"}),
+        ],
+        className="pf-metrics",
     )
 
     # Explicit memory cleanup - most important callback for memory usage
