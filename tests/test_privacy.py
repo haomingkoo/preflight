@@ -159,7 +159,9 @@ def test_legal_pages_render(path: str) -> None:
     resp = app.server.test_client().get(path)
 
     assert resp.status_code == 200
-    assert b"LAWYER REVIEW" in resp.data
+    assert b"privacy@kooexperience.com" in resp.data
+    for marker in (b"LAWYER REVIEW", b"CONTACT EMAIL", b"owner to confirm", "\u2014".encode()):
+        assert marker not in resp.data
 
 
 def test_csp_has_no_font_or_style_cdns() -> None:
