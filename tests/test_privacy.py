@@ -183,7 +183,24 @@ def test_csp_has_no_font_or_style_cdns() -> None:
 
 
 def test_vendored_css_has_no_remote_imports() -> None:
-    css = (Path(app.__file__).parent / "assets" / "bootstrap-darkly.min.css").read_text()
+    assets = Path(app.__file__).parent / "assets"
+    css = "".join(p.read_text() for p in assets.glob("*.css"))
 
     assert "@import" not in css
     assert "googleapis" not in css
+
+
+@pytest.mark.parametrize("path", ["/", "/privacy", "/terms"])
+def test_pages_share_footer_and_favicon(path: str) -> None:
+    html = app.server.test_client().get(path).get_data(as_text=True)
+    if path == "/":
+        # The Dash shell renders the layout client-side; the footer lives in the layout.
+        html += str(app.app.layout)
+    assert "/assets/favicon.svg" in html
+    assert "2026 Haoming Koo" in html
+    assert "kooexperience.com" in html
+    assert "github.com/haomingkoo/preflight" in html
+
+
+def test_legal_pages_load_their_assets_without_auth() -> None:
+    assert {"/assets/favicon.svg", "/assets/fonts/hanken-grotesk-latin-wght-normal.woff2"} <= app.PUBLIC_PATHS
