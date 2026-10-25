@@ -19,4 +19,4 @@ EXPOSE 8050
 USER app
 
 # If wsgi.py defines server = <flask_app> or server = <dash_app.server>
-CMD ["sh", "-c", "gunicorn wsgi:server --bind 0.0.0.0:${PORT:-8050} --workers 2 --threads 4 --timeout 180 --access-logfile - --error-logfile -"]
+CMD ["sh", "-c", "gunicorn wsgi:server --bind 0.0.0.0:${PORT:-8050} --workers 2 --threads 4 --timeout 180 --error-logfile -"]

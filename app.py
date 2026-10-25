@@ -35,7 +35,9 @@ from dash import Dash, dcc, html, Input, Output, State, dash_table, callback_con
 import dash_bootstrap_components as dbc
 import plotly.express as px
 import plotly.graph_objects as go
-from flask import Response, request, session
+from flask import Response, g, request, session
+
+import legal
 
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
 from sklearn.pipeline import Pipeline
@@ -76,6 +78,14 @@ UPLOAD_RATE_LIMIT_PER_MIN = int(os.getenv("PREFLIGHT_UPLOAD_RATE_LIMIT_PER_MIN",
 TRAIN_RATE_LIMIT_PER_MIN = int(os.getenv("PREFLIGHT_TRAIN_RATE_LIMIT_PER_MIN", "12"))
 DATA_RETENTION_SECONDS = int(os.getenv("PREFLIGHT_DATA_RETENTION_SECONDS", "1800"))
 DATA_DIR = Path(os.getenv("PREFLIGHT_DATA_DIR", "/tmp/preflight-data"))
+CLEANUP_INTERVAL_SECONDS = int(os.getenv("PREFLIGHT_CLEANUP_INTERVAL_SECONDS", "60"))
+RATE_LIMIT_WINDOW_SECONDS = 60
+CONSENT_VALUE = "agree"
+CONSENT_TEXT = (
+    "I have the right to upload this data and it contains no personal data of others, "
+    "or I have permission to process it."
+)
+CONSENT_REQUIRED_MESSAGE = "Tick the box to confirm you have the right to upload this data, then upload again."
 
 LOGGER = logging.getLogger("preflight")
 if not logging.getLogger().handlers:
@@ -113,9 +123,9 @@ SESSION_COOKIE_SECURE = env_flag(
 
 CSP_POLICY = (
     "default-src 'self'; "
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://static.cloudflareinsights.com; "
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "
-    "font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net data:; "
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; "
+    "style-src 'self' 'unsafe-inline'; "
+    "font-src 'self' data:; "
     "img-src 'self' data: blob:; "
     "connect-src 'self' https://cloudflareinsights.com; "
     "frame-ancestors 'none'; "
@@ -131,6 +141,22 @@ if REQUIRE_AUTH and (not AUTH_USER or not AUTH_PASSWORD):
 # -----------------------
 # Utilities
 # -----------------------
+def _request_id() -> str:
+    try:
+        rid = g.get("request_id")
+        if not rid:
+            rid = secrets.token_hex(8)
+            g.request_id = rid
+        return rid
+    except RuntimeError:  # outside a request context
+        return "no-request"
+
+
+def log_error(context: str, exc: BaseException) -> None:
+    """Log only the exception type and request id. Messages can carry uploaded cell values."""
+    LOGGER.error("%s: %s (request_id=%s)", context, type(exc).__name__, _request_id())
+
+
 def log_memory_usage(operation: str, before_mb: Optional[float] = None) -> None:
     """
     Log memory usage for monitoring and troubleshooting.
@@ -189,7 +215,7 @@ def _client_ip() -> str:
 
 def _allow_action(action: str, limit_per_minute: int) -> bool:
     now = time.time()
-    cutoff = now - 60
+    cutoff = now - RATE_LIMIT_WINDOW_SECONDS
     key = (_client_ip(), action)
     with RATE_LIMIT_LOCK:
         bucket = RATE_LIMIT_BUCKETS[key]
@@ -199,6 +225,16 @@ def _allow_action(action: str, limit_per_minute: int) -> bool:
             return False
         bucket.append(now)
     return True
+
+
+def prune_rate_limit_buckets(now: Optional[float] = None) -> int:
+    """Drop buckets with no hits inside the window so client IPs do not linger in memory."""
+    cutoff = (now or time.time()) - RATE_LIMIT_WINDOW_SECONDS
+    with RATE_LIMIT_LOCK:
+        stale = [k for k, b in RATE_LIMIT_BUCKETS.items() if not b or b[-1] < cutoff]
+        for k in stale:
+            del RATE_LIMIT_BUCKETS[k]
+    return len(stale)
 
 
 def _ensure_session_id() -> str:
@@ -216,15 +252,15 @@ def _dataset_path_for_current_session() -> Path:
     return DATA_DIR / f"{sid}.json.gz"
 
 
-def _cleanup_stale_datasets() -> None:
+def _cleanup_stale_datasets(force: bool = False) -> None:
     global LAST_DATA_CLEANUP_EPOCH
     now = time.time()
-    if now - LAST_DATA_CLEANUP_EPOCH < 300:
+    if not force and now - LAST_DATA_CLEANUP_EPOCH < 300:
         return
     LAST_DATA_CLEANUP_EPOCH = now
     cutoff = now - DATA_RETENTION_SECONDS
     deleted_count = 0
-    for dataset_path in DATA_DIR.glob("*.json.gz"):
+    for dataset_path in [*DATA_DIR.glob("*.json.gz"), *DATA_DIR.glob("*.json.tmp")]:
         try:
             if dataset_path.stat().st_mtime < cutoff:
                 dataset_path.unlink(missing_ok=True)
@@ -238,6 +274,38 @@ def _cleanup_stale_datasets() -> None:
         gc.collect()
 
 
+def _cleanup_loop() -> None:
+    while True:
+        time.sleep(CLEANUP_INTERVAL_SECONDS)
+        try:
+            _cleanup_stale_datasets(force=True)
+            prune_rate_limit_buckets()
+        except Exception as exc:  # keep the timer alive
+            log_error("Background cleanup failed", exc)
+
+
+def start_cleanup_thread() -> threading.Thread:
+    thread = threading.Thread(target=_cleanup_loop, name="preflight-cleanup", daemon=True)
+    thread.start()
+    return thread
+
+
+def delete_session_dataset() -> bool:
+    """Remove the current session's dataset and its temp file. Returns True if a file was removed."""
+    destination = _dataset_path_for_current_session()
+    removed = False
+    for path in (destination, destination.with_suffix(".tmp")):
+        try:
+            if path.exists():
+                path.unlink()
+                removed = True
+        except OSError as exc:
+            log_error("Failed to delete session dataset", exc)
+    session.pop("dataset_token", None)
+    session.modified = True
+    return removed
+
+
 def save_df_for_session(df: pd.DataFrame) -> str:
     payload = df.to_json(date_format="iso", orient="split")
     encoded = payload.encode("utf-8")
@@ -247,13 +315,16 @@ def save_df_for_session(df: pd.DataFrame) -> str:
         )
     destination = _dataset_path_for_current_session()
     temp_path = destination.with_suffix(".tmp")
-    with gzip.open(temp_path, "wb") as f:
-        f.write(encoded)
     try:
-        os.chmod(temp_path, 0o600)
-    except OSError:
-        pass
-    os.replace(temp_path, destination)
+        with gzip.open(temp_path, "wb") as f:
+            f.write(encoded)
+        try:
+            os.chmod(temp_path, 0o600)
+        except OSError:
+            pass
+        os.replace(temp_path, destination)
+    finally:
+        temp_path.unlink(missing_ok=True)
     token = secrets.token_urlsafe(16)
     session["dataset_token"] = token
     session.modified = True
@@ -273,8 +344,8 @@ def load_df_for_session_token(token: str) -> Optional[pd.DataFrame]:
         with gzip.open(dataset_path, "rt", encoding="utf-8") as f:
             payload = f.read()
         return pd.read_json(io.StringIO(payload), orient="split")
-    except Exception:
-        LOGGER.exception("Failed to load cached dataset for session")
+    except Exception as exc:
+        log_error("Failed to load cached dataset for session", exc)
         return None
 
 
@@ -615,10 +686,12 @@ def missingness_heatmap_figure(
 # -----------------------
 # App + CSS
 # -----------------------
-app = Dash(__name__, external_stylesheets=[dbc.themes.DARKLY])
+# Bootswatch Darkly is vendored in assets/ (Google Fonts @import removed) so no CDN is contacted.
+app = Dash(__name__)
 server = app.server
 app.title = "Preflight"
 _ensure_data_dir()
+start_cleanup_thread()
 
 default_secret = None if os.getenv("RAILWAY_ENVIRONMENT") else secrets.token_hex(32)
 secret_key = os.getenv("PREFLIGHT_SECRET_KEY", default_secret)
@@ -636,12 +709,24 @@ server.config.update(
 )
 
 
+PUBLIC_PATHS = {"/privacy", "/terms"}
+
+
+def _log_exception_without_data(exc_info) -> None:
+    """Replace Flask's traceback logging: tracebacks can echo uploaded cell values."""
+    log_error(f"Unhandled error on {request.path}", exc_info[1])
+
+
+server.log_exception = _log_exception_without_data
+
+
 @server.before_request
 def security_guard():
+    g.request_id = secrets.token_hex(8)
     _ensure_session_id()
     _cleanup_stale_datasets()
 
-    if REQUIRE_AUTH and not _is_authorized_request():
+    if REQUIRE_AUTH and request.path not in PUBLIC_PATHS and not _is_authorized_request():
         return _unauthorized_response()
 
     if ENFORCE_POST_ORIGIN and request.method == "POST" and request.path.startswith("/_dash"):
@@ -665,6 +750,16 @@ def add_security_headers(resp):
         resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     return resp
 
+@server.route("/privacy")
+def privacy_page() -> Response:
+    return Response(legal.PRIVACY_HTML, mimetype="text/html")
+
+
+@server.route("/terms")
+def terms_page() -> Response:
+    return Response(legal.TERMS_HTML, mimetype="text/html")
+
+
 app.index_string = """
 <!DOCTYPE html>
 <html>
@@ -672,9 +767,7 @@ app.index_string = """
     {%metas%}
     <title>{%title%}</title>
     {%favicon%}
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
     {%css%}
   </head>
   <body>
@@ -1292,11 +1385,30 @@ app.layout = dbc.Container(
                     accept=".csv,.parquet",
                     max_size=MAX_UPLOAD_BYTES,
                     multiple=False,
+                    disabled=True,
                 ),
                 width=12,
             ),
-            className="mb-3",
+            className="mb-2",
         ),
+        dcc.Checklist(
+            id="upload-consent",
+            options=[{"label": CONSENT_TEXT, "value": CONSENT_VALUE}],
+            value=[],
+            className="pf-consent",
+        ),
+        html.P(
+            [
+                "Your file is processed on our server (Railway, behind Cloudflare) only to produce this analysis. "
+                f"It is deleted {DATA_RETENTION_SECONDS // 60} minutes after upload, or right away if you use "
+                "Delete my data now. It is never shared or used for anything else. ",
+                html.A("Privacy", href="/privacy", target="_blank", rel="noopener"),
+                " · ",
+                html.A("Terms", href="/terms", target="_blank", rel="noopener"),
+            ],
+            className="pf-upload-notice",
+        ),
+        html.Button("Delete my data now", id="btn-delete-data", n_clicks=0, className="pf-delete-btn"),
         dcc.Loading(
             id="loading-upload",
             type="default",
@@ -1338,6 +1450,13 @@ app.layout = dbc.Container(
             ],
         ),
         html.Div([guide_pane, health_pane, missing_pane, typing_pane, eda_pane, model_pane], style={"paddingTop": "12px"}),
+        html.Footer(
+            [
+                html.A("Privacy", href="/privacy"),
+                html.A("Terms", href="/terms"),
+            ],
+            className="pf-footer",
+        ),
     ],
 )
 
@@ -1389,10 +1508,16 @@ def toggle_corr_block(show_vals):
     Input("upload-data", "contents"),
     State("upload-data", "filename"),
     State("missing-tokens", "value"),
+    State("upload-consent", "value"),
 )
-def on_upload(contents, filename, missing_tokens_str):
+def on_upload(contents, filename, missing_tokens_str, consent=None):
     if not contents or not filename:
-        return None, None, None, ""
+        # Keep any message already shown (e.g. the delete confirmation).
+        return None, None, no_update, ""
+
+    # Enforced here as well as in the UI: a crafted callback request without consent is refused.
+    if CONSENT_VALUE not in (consent or []):
+        return None, None, ("error", CONSENT_REQUIRED_MESSAGE), ""
 
     if not _allow_action("upload", UPLOAD_RATE_LIMIT_PER_MIN):
         return None, None, ("error", "Upload rate limit exceeded. Please wait and retry."), ""
@@ -1401,8 +1526,8 @@ def on_upload(contents, filename, missing_tokens_str):
         df = parse_contents(contents, filename)
     except ValueError as e:
         return None, None, ("error", str(e)), ""
-    except Exception:
-        LOGGER.exception("Unexpected upload parsing error")
+    except Exception as exc:
+        log_error("Unexpected upload parsing error", exc)
         return None, None, ("error", "Could not read file. Please upload a valid CSV or Parquet file."), ""
 
     tokens = [t.strip() for t in (missing_tokens_str or "").split(",")]
@@ -1432,8 +1557,8 @@ def on_upload(contents, filename, missing_tokens_str):
         dataset_token = save_df_for_session(df)
     except ValueError as e:
         return None, None, ("error", str(e)), ""
-    except Exception:
-        LOGGER.exception("Failed to persist uploaded dataset")
+    except Exception as exc:
+        log_error("Failed to persist uploaded dataset", exc)
         return None, None, ("error", "Upload failed while storing data. Please retry."), ""
 
     # Explicit memory cleanup after dataframe is saved to disk
@@ -1441,6 +1566,46 @@ def on_upload(contents, filename, missing_tokens_str):
     gc.collect()
     
     return dataset_token, None, note, filename
+
+@app.callback(
+    Output("upload-data", "disabled"),
+    Input("upload-consent", "value"),
+)
+def toggle_upload_enabled(consent):
+    return CONSENT_VALUE not in (consent or [])
+
+
+@app.callback(
+    Output("store-df-json", "data", allow_duplicate=True),
+    Output("store-upload-note", "data", allow_duplicate=True),
+    Output("upload-data", "contents"),
+    Input("btn-delete-data", "n_clicks"),
+    prevent_initial_call=True,
+)
+def on_delete_data(n_clicks):
+    if not n_clicks:
+        return no_update, no_update, no_update
+    removed = delete_session_dataset()
+    gc.collect()
+    msg = "Your data was deleted from the server." if removed else "There was no data stored for this session."
+    # Clearing contents also lets the same file be uploaded again.
+    return None, ("success", msg), None
+
+
+# The browser ignores re-selecting the same file unless the input is cleared.
+app.clientside_callback(
+    """
+    function(n) {
+        const input = document.querySelector('#upload-data input[type=file]');
+        if (input) { input.value = ''; }
+        return null;
+    }
+    """,
+    Output("upload-data", "filename"),
+    Input("btn-delete-data", "n_clicks"),
+    prevent_initial_call=True,
+)
+
 
 @app.callback(
     Output("upload-note", "children"),
@@ -2121,8 +2286,8 @@ def train_model(
     try:
         cv_scores = cross_val_score(pipe, X_train, y_train, cv=cv, scoring=cv_metric)
         pipe.fit(X_train, y_train)
-    except Exception:
-        LOGGER.exception("Model training failed")
+    except Exception as exc:
+        log_error("Model training failed", exc)
         return (
             html.Div("Training failed. Try fewer rows/features or a simpler model."),
             empty_fig,
