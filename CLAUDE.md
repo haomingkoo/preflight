@@ -6,7 +6,7 @@ Single-file Dash app (`app.py`, served by `wsgi:server`) live at preflight.kooex
 
 - `pip install -r requirements.txt` (Python 3.12; pytest is in requirements)
 - `python app.py` serves on http://localhost:8050
-- `pytest -q` runs `tests/` and the root `test_*.py` files (about 2 minutes). There is no CI, so run it before every PR.
+- `pytest -q` runs `tests/` and the root `test_*.py` files (about 2 minutes). CI (`.github/workflows/tests.yml`) runs it on every PR; run it locally first too.
 
 ## Deploy
 
@@ -19,7 +19,7 @@ Single-file Dash app (`app.py`, served by `wsgi:server`) live at preflight.kooex
 - Auth defaults on whenever `RAILWAY_ENVIRONMENT` is set. Startup fails closed if `PREFLIGHT_AUTH_USER`/`PREFLIGHT_AUTH_PASSWORD` are missing, unless `PREFLIGHT_REQUIRE_AUTH=0`.
 - `/privacy` and `/terms` (`legal.py`) must stay outside Basic Auth (`PUBLIC_PATHS`). They describe what the code does, so update them when data handling changes.
 - `pyarrow` is pinned to 25.0.0 because 26 needs numpy 2 and numpy is pinned to 1.26.4. Bump them together.
-- No CDNs. Bootstrap Darkly and Inter are vendored in `assets/`. A test fails if the CSP or the CSS pulls fonts or styles from outside.
+- No CDNs. Bootstrap 5.3.3 (light) and Hanken Grotesk are vendored in `assets/`; the theme is `assets/preflight.css` (see `DESIGN.md`). A test fails if the CSP or the CSS pulls fonts or styles from outside.
 
 ## Safety rules (enforced by `tests/test_privacy.py`)
 

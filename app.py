@@ -34,6 +34,7 @@ import pandas as pd
 
 from dash import Dash, dcc, html, Input, Output, State, dash_table, callback_context, no_update
 import dash_bootstrap_components as dbc
+from dash.dash_table.Format import Format, Group, Scheme
 import plotly.express as px
 import plotly.graph_objects as go
 import plotly.io as pio
@@ -571,7 +572,7 @@ def fig_confusion_matrix(cm: np.ndarray, labels: List[str]) -> go.Figure:
         y=labels,
         labels={"x": "Predicted", "y": "Actual"},
         title="Confusion Matrix",
-        template="plotly_dark",
+        template="preflight",
     )
     fig.update_layout(height=CHART_HEIGHT, margin=dict(l=40, r=40, t=60, b=40))
     return fig
@@ -591,7 +592,7 @@ def fig_roc_pr(y_true: np.ndarray, y_proba: np.ndarray) -> Tuple[go.Figure, go.F
     fig_roc.update_layout(
         height=CHART_HEIGHT,
         title="ROC Curve",
-        template="plotly_dark",
+        template="preflight",
         xaxis_title="False Positive Rate",
         yaxis_title="True Positive Rate",
         margin=dict(l=40, r=40, t=60, b=40),
@@ -602,7 +603,7 @@ def fig_roc_pr(y_true: np.ndarray, y_proba: np.ndarray) -> Tuple[go.Figure, go.F
     fig_pr.update_layout(
         height=CHART_HEIGHT,
         title="Precision-Recall Curve",
-        template="plotly_dark",
+        template="preflight",
         xaxis_title="Recall",
         yaxis_title="Precision",
         margin=dict(l=40, r=40, t=60, b=40),
@@ -618,9 +619,7 @@ def missingness_heatmap_figure(
     top_n: int,
 ) -> go.Figure:
     if df is None or len(df) == 0:
-        fig = go.Figure()
-        fig.update_layout(height=CHART_HEIGHT, template="plotly_dark", title="Missingness Matrix")
-        return fig
+        return placeholder_fig("Upload a file to see where its values are missing.")
 
     seed = int(seed or 42)
     sample_n = int(max(50, min(int(sample_n or 5000), len(df))))
@@ -660,7 +659,8 @@ def missingness_heatmap_figure(
             showscale=False,
             zmin=0,
             zmax=1,
-            colorscale=[[0.0, "black"], [1.0, "white"]],
+            # Present cells stay pale; missing cells are the one dark mark.
+            colorscale=[[0.0, "#e6ecec"], [1.0, "#0b5953"]],
             # xgap=1,   # vertical grid lines (between columns)
             # ygap=0,   # horizontal grid lines (between rows)
         )
@@ -680,35 +680,39 @@ def missingness_heatmap_figure(
     )
 
     fig.update_layout(
-        template="plotly_dark",
-        title=f"Missingness Matrix (rows={sample_n:,}, cols={len(cols):,}, seed={seed})",
+        template="preflight",
+        title=f"Missing values by row ({sample_n:,} rows, {len(cols):,} columns, seed {seed})",
         margin=dict(l=40, r=40, t=60, b=120),
         height=520,
     )
     return fig
 
 # -----------------------
-# Chart theme: plotly_dark tuned to the page tokens, used by every figure
+# Chart theme: plotly_white tuned to the page tokens, used by every figure
 # -----------------------
 CHART_FONT = "Hanken Grotesk, system-ui, -apple-system, Segoe UI, sans-serif"
-CHART_INK = "#b9bbc2"
-CHART_GRID = "rgba(244,244,246,0.08)"
+CHART_INK = "#3a4448"
+CHART_GRID = "#e3e8e8"
 # Explicit heights: dcc.Graph otherwise keeps the size of the previous figure (e.g. a short placeholder).
 CHART_HEIGHT = 450
 PLACEHOLDER_HEIGHT = 160
-_dark = pio.templates["plotly_dark"]
-_dark.layout.update(
+_theme = go.layout.Template(pio.templates["plotly_white"])
+_theme.layout.update(
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(0,0,0,0)",
     font=dict(family=CHART_FONT, color=CHART_INK, size=13),
-    title=dict(font=dict(size=15, color="#f4f4f6"), x=0, xanchor="left", pad=dict(l=4)),
-    colorway=["#5b8efb", "#f59e0b", "#34d399", "#f472b6", "#a78bfa", "#22d3ee", "#fb7185", "#a3e635"],
-    hoverlabel=dict(bgcolor="#11141d", bordercolor="rgba(244,244,246,0.18)", font=dict(family=CHART_FONT, color="#f4f4f6")),
+    title=dict(font=dict(size=15, color="#141a1d"), x=0, xanchor="left", pad=dict(l=4)),
+    # Teal first, then hues that stay distinct for common colour-vision deficiencies.
+    colorway=["#0f766e", "#b45309", "#1d4ed8", "#be185d", "#4d7c0f", "#6d28d9", "#0e7490", "#9f1239"],
+    hoverlabel=dict(bgcolor="#ffffff", bordercolor="#8a9494", font=dict(family=CHART_FONT, color="#141a1d")),
     legend=dict(bgcolor="rgba(0,0,0,0)"),
 )
-_dark.layout.xaxis.update(gridcolor=CHART_GRID, zerolinecolor=CHART_GRID, linecolor=CHART_GRID)
-_dark.layout.yaxis.update(gridcolor=CHART_GRID, zerolinecolor=CHART_GRID, linecolor=CHART_GRID)
-pio.templates.default = "plotly_dark"
+_theme.layout.xaxis.update(gridcolor=CHART_GRID, zerolinecolor=CHART_GRID, linecolor="#8a9494")
+_theme.layout.yaxis.update(gridcolor=CHART_GRID, zerolinecolor=CHART_GRID, linecolor="#8a9494")
+_theme.layout.colorscale.sequential = [[0.0, "#f0f7f6"], [0.5, "#5fb3a9"], [1.0, "#0b4f4a"]]
+_theme.layout.colorscale.diverging = [[0.0, "#8c510a"], [0.5, "#f5f5f5"], [1.0, "#01665e"]]
+pio.templates["preflight"] = _theme
+pio.templates.default = "preflight"
 
 
 def placeholder_fig(message: str) -> go.Figure:
@@ -716,11 +720,11 @@ def placeholder_fig(message: str) -> go.Figure:
     fig = go.Figure()
     fig.update_layout(
         height=PLACEHOLDER_HEIGHT,
-        template="plotly_dark",
+        template="preflight",
         margin=dict(l=8, r=8, t=8, b=8),
         xaxis=dict(visible=False),
         yaxis=dict(visible=False),
-        annotations=[dict(text="<br>".join(textwrap.wrap(message, 34)), showarrow=False, font=dict(size=14, color="#9b9ea7"),
+        annotations=[dict(text="<br>".join(textwrap.wrap(message, 34)), showarrow=False, font=dict(size=14, color="#56616a"),
                           xref="paper", yref="paper", x=0.5, y=0.5)],
     )
     return fig
@@ -729,10 +733,10 @@ def placeholder_fig(message: str) -> go.Figure:
 # -----------------------
 # App + CSS
 # -----------------------
-# Bootswatch Darkly is vendored in assets/ (Google Fonts @import removed) so no CDN is contacted.
+# Bootstrap and the theme CSS are vendored in assets/ so no CDN is contacted.
 app = Dash(__name__)
 server = app.server
-app.title = "Preflight"
+app.title = "Preflight: check a dataset before you model it"
 _ensure_data_dir()
 start_cleanup_thread()
 
@@ -752,7 +756,8 @@ server.config.update(
 )
 
 
-PUBLIC_PATHS = {"/privacy", "/terms"}
+# Legal pages and the two static files they load stay reachable without Basic Auth.
+PUBLIC_PATHS = {"/privacy", "/terms", "/assets/favicon.svg", "/assets/fonts/hanken-grotesk-latin-wght-normal.woff2"}
 
 
 def _log_exception_without_data(exc_info) -> None:
@@ -809,8 +814,13 @@ app.index_string = """
   <head>
     {%metas%}
     <title>{%title%}</title>
-    {%favicon%}
-    <meta name="theme-color" content="#04050a" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="description" content="Upload a CSV or Parquet file to check missing values, column types and distributions, then train a baseline model. Files are deleted after 30 minutes." />
+    <meta property="og:title" content="Preflight: check a dataset before you model it" />
+    <meta property="og:description" content="Check a CSV or Parquet file for gaps and column types, then train a baseline model." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://preflight.kooexperience.com/" />
+    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
     <link rel="preload" href="/assets/fonts/hanken-grotesk-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
     {%css%}
   </head>
@@ -847,31 +857,20 @@ guide_pane = html.Div(
         dbc.Card(
             dbc.CardBody(
                 [
-                    html.H2("What Preflight does"),
-                    html.P(
-                        "Upload a CSV or Parquet file to see its gaps and column types, then train a baseline model."
-                    ),
-                    html.H3("How to use it"),
+                    html.H2("How to check a dataset"),
                     html.Ol(
                         [
-                            html.Li("Upload a CSV or Parquet file at the top."),
-                            html.Li("Open Data Health to inspect missing data, unique values, and duplicates."),
-                            html.Li("Choose your target column in Data Health."),
-                            html.Li("Use Missingness to see where data is empty."),
-                            html.Li("Use Data Types to review and save feature types."),
-                            html.Li("Use EDA to explore charts and correlation patterns."),
-                            html.Li("Use Model to train a baseline and review metrics."),
+                            html.Li("Tick the confirmation box, then upload a CSV or Parquet file."),
+                            html.Li("Data health: check row and column counts, duplicates and missing values per column, then pick the column you want to predict."),
+                            html.Li("Missing values: see which rows and columns have gaps, and whether they cluster."),
+                            html.Li("Column types: confirm which columns are numbers, categories or IDs to drop. Save before you model."),
+                            html.Li("Explore: chart each column against the target and look for strongly correlated pairs."),
+                            html.Li("Model: train a baseline and read its scores on a held-out test split."),
                         ]
                     ),
-                    html.H3("What each tab shows"),
-                    html.Ul(
-                        [
-                            html.Li("Data Health: basic data quality checks."),
-                            html.Li("Missingness: where values are missing and how often."),
-                            html.Li("Data Types: feature engineering decisions before modeling."),
-                            html.Li("EDA: visual exploration for distributions and relationships."),
-                            html.Li("Model: quick benchmark model for your current dataset."),
-                        ]
+                    html.P(
+                        "A baseline is a quick yardstick, not a finished model. If a simple model already scores well, check the columns for leaks of the answer.",
+                        className="pf-hint",
                     ),
                 ]
             ),
@@ -895,53 +894,56 @@ health_pane = html.Div(
                         ],
                         className="pf-stats",
                     ),
-                    html.H2("Column Summary"),
+                    html.H2("Column summary"),
                     dash_table.DataTable(
                         id="health-profile-table",
                         data=[],
                         columns=[
-                            {"name": "column", "id": "column"},
-                            {"name": "dtype", "id": "dtype"},
-                            {"name": "missing_%", "id": "missing_%"},
-                            {"name": "n_unique", "id": "n_unique"},
-                            {"name": "unique_ratio", "id": "unique_ratio"},
+                            {"name": "Column", "id": "column"},
+                            {"name": "Type", "id": "dtype"},
+                            {"name": "Missing %", "id": "missing_%", "type": "numeric", "format": Format(precision=1, scheme=Scheme.fixed)},
+                            {"name": "Unique values", "id": "n_unique", "type": "numeric", "format": Format(group=Group.yes)},
+                            {"name": "Unique ratio", "id": "unique_ratio", "type": "numeric", "format": Format(precision=3, scheme=Scheme.fixed)},
+                        ],
+                        style_cell_conditional=[
+                            {"if": {"column_id": c}, "textAlign": "left"} for c in ("column", "dtype")
                         ],
                         page_size=12,
                         style_table={"overflowX": "auto"},
                         style_cell={
-                            "fontFamily": "Arial",
+                            "fontFamily": "Hanken Grotesk, system-ui, sans-serif",
                             "fontSize": 12,
                             "padding": "6px",
-                            "backgroundColor": "#1f1f1f",
-                            "color": "white",
-                            "border": "1px solid #333",
+                            "backgroundColor": "#ffffff",
+                            "color": "#141a1d",
+                            "border": "1px solid #dbe1e1",
                         },
                         style_header={
                             "fontWeight": "bold",
-                            "backgroundColor": "#2b2b2b",
-                            "border": "1px solid #444",
+                            "backgroundColor": "#f0f3f3",
+                            "border": "1px solid #dbe1e1",
                         },
                         css=[
                             {
                                 "selector": ".dash-table-container .previous-next-container span",
-                                "rule": "color: #ffffff !important;",
+                                "rule": "color: #141a1d !important;",
                             },
                             {
                                 "selector": ".dash-table-container .previous-next-container .page-number",
-                                "rule": "color: #ffffff !important;",
+                                "rule": "color: #141a1d !important;",
                             },
                             {
                                 "selector": ".dash-table-container .previous-next-container input",
-                                "rule": "color: #ffffff !important; background-color: #2b2b2b !important;",
+                                "rule": "color: #141a1d !important; background-color: #ffffff !important;",
                             },
                             {
                                 "selector": ".dash-table-container .previous-next-container input[type='text']",
-                                "rule": "-webkit-text-fill-color: #ffffff !important;",
+                                "rule": "-webkit-text-fill-color: #141a1d !important;",
                             },
                         ],
                     ),
                     html.Div(style={"height": "12px"}),
-                    html.Label("Select target column"),
+                    html.Label("Target column (what a model should predict)"),
                     dcc.Dropdown(id="target-dropdown", options=[], value=None, clearable=True),
                     html.Div(id="target-note", style={"marginTop": "8px"}),
                 ]
@@ -957,7 +959,7 @@ missing_pane = html.Div(
         dbc.Card(
             dbc.CardBody(
                 [
-                    html.H2("Missingness"),
+                    html.H2("Missing values"),
                     dbc.Row(
                         [
                             dbc.Col(
@@ -1018,7 +1020,7 @@ typing_pane = html.Div(
                         [
                             dbc.Col(
                                 [
-                                    html.Label("Low-cardinality threshold (categorical if nunique <= K)"),
+                                    html.Label("Treat a column as a category when it has at most this many distinct values"),
                                     dcc.Slider(
                                         id="k-threshold",
                                         min=5,
@@ -1028,7 +1030,7 @@ typing_pane = html.Div(
                                         marks={v: str(v) for v in range(5, 51, 5)},
                                     ),
                                     html.Div(style={"height": "12px"}),
-                                    html.Label("ID-like unique ratio threshold (drop if unique_ratio >= T)"),
+                                    html.Label("Drop a column as an ID when at least this share of its values is unique"),
                                     dcc.Slider(
                                         id="id-threshold",
                                         min=0.70,
@@ -1040,7 +1042,7 @@ typing_pane = html.Div(
                                     html.Div(style={"height": "12px"}),
                                     dcc.Checklist(
                                         id="int-as-cat",
-                                        options=[{"label": "Treat small-unique integer columns as categorical", "value": "on"}],
+                                        options=[{"label": "Treat whole-number columns with few values as categories", "value": "on"}],
                                         value=["on"],
                                     ),
                                     html.Button("Recompute", id="btn-recompute", n_clicks=0),
@@ -1052,16 +1054,16 @@ typing_pane = html.Div(
                                 dcc.Loading(
                                     id="loading-typing",
                                     type="default",
-                                    color="#5b8efb",
+                                    color="#0f766e",
                                     children=[
-                                        html.H2("Typing Table (edit overrides)"),
+                                        html.H2("Column types"),
                                         dash_table.DataTable(
                                             id="typing-table",
                                             data=[],
                                             columns=[
-                                                {"name": "column", "id": "column", "editable": False},
-                                                {"name": "suggested_type", "id": "suggested_type", "editable": False},
-                                                {"name": "override_type", "id": "override_type", "presentation": "dropdown", "editable": True},
+                                                {"name": "Column", "id": "column", "editable": False},
+                                                {"name": "Suggested type", "id": "suggested_type", "editable": False},
+                                                {"name": "Your choice", "id": "override_type", "presentation": "dropdown", "editable": True},
                                             ],
                                             editable=True,
                                             dropdown={
@@ -1072,27 +1074,28 @@ typing_pane = html.Div(
                                             page_size=12,
                                             style_table={"overflowX": "auto", "maxHeight": "420px", "overflowY": "auto"},
                                             style_cell={
-                                                "fontFamily": "Arial",
+                                                "fontFamily": "Hanken Grotesk, system-ui, sans-serif",
                                                 "fontSize": 12,
                                                 "padding": "6px",
-                                                "backgroundColor": "#1f1f1f",
-                                                "color": "white",
-                                                "border": "1px solid #333",
+                                                "backgroundColor": "#ffffff",
+                                                "color": "#141a1d",
+                                                "border": "1px solid #dbe1e1",
                                                 "overflow": "visible",
                                             },
                                             style_data={"overflow": "visible"},
-                                            style_header={"fontWeight": "bold", "backgroundColor": "#2b2b2b", "border": "1px solid #444"},
+                                            style_cell_conditional=[{"if": {"column_id": c}, "textAlign": "left"} for c in ("column", "suggested_type", "override_type")],
+                                            style_header={"fontWeight": "bold", "backgroundColor": "#f0f3f3", "border": "1px solid #dbe1e1"},
                                             css=[
                                                 {"selector": ".dash-spreadsheet-container .dropdown", "rule": "position: static !important;"},
                                                 {"selector": ".dash-spreadsheet-container .Select-menu-outer", "rule": "display: block !important; z-index: 9999 !important;"},
-                                                {"selector": ".dash-spreadsheet-container .Select-control", "rule": "background-color: #2b2b2b !important; color: #fff !important; border: 1px solid #666 !important;"},
-                                                {"selector": ".dash-spreadsheet-container .Select-value-label", "rule": "color: #fff !important;"},
-                                                {"selector": ".dash-spreadsheet-container .Select-menu-outer *", "rule": "color: #fff !important;"},
+                                                {"selector": ".dash-spreadsheet-container .Select-control", "rule": "background-color: #ffffff !important; color: #141a1d !important; border: 1px solid #8a9494 !important;"},
+                                                {"selector": ".dash-spreadsheet-container .Select-value-label", "rule": "color: #141a1d !important;"},
+                                                {"selector": ".dash-spreadsheet-container .Select-menu-outer *", "rule": "color: #141a1d !important;"},
                                             ],
                                         ),
                                         dbc.Row(
                                             [
-                                                dbc.Col(html.Button("Save Types", id="btn-save-types", n_clicks=0), width="auto"),
+                                                dbc.Col(html.Button("Save types", id="btn-save-types", n_clicks=0), width="auto"),
                                                 dbc.Col(html.Div(id="typing-save-note"), width=True),
                                             ],
                                             align="center",
@@ -1121,7 +1124,7 @@ eda_pane = html.Div(
                         [
                             dbc.Col(
                                 [
-                                    html.Label("Pick feature(s)"),
+                                    html.Label("Columns to chart"),
                                     dcc.Dropdown(id="eda-features", options=[], multi=True, value=[]),
                                     dbc.Row(
                                         [
@@ -1169,7 +1172,7 @@ eda_pane = html.Div(
                                 ),
                                 width="auto",
                             ),
-                            dbc.Col(html.Button("Prev", id="btn-eda-prev", n_clicks=0), width="auto"),
+                            dbc.Col(html.Button("Previous", id="btn-eda-prev", n_clicks=0), width="auto"),
                             dbc.Col(html.Button("Next", id="btn-eda-next", n_clicks=0), width="auto"),
                             dbc.Col(html.Div(id="eda-page-label"), width=True),
                         ],
@@ -1185,7 +1188,7 @@ eda_pane = html.Div(
                     dcc.Loading(
                         id="loading-eda",
                         type="default",
-                        color="#5b8efb",
+                        color="#0f766e",
                         children=[
                             html.Div(
                                 id="corr-block",
@@ -1343,7 +1346,7 @@ model_pane = html.Div(
                     dcc.Loading(
                         id="loading-train",
                         type="default",
-                        color="#5b8efb",
+                        color="#0f766e",
                         children=[
                             html.Div(id="model-metrics", className="mb-3"),
                             dbc.Row(
@@ -1369,37 +1372,49 @@ model_pane = html.Div(
 app.layout = dbc.Container(
     fluid=True,
     children=[
-        html.Nav(
+        html.Header(
             [
-                html.A("HK", href="https://kooexperience.com", className="pf-logo"),
-                html.Div(
+                html.A(
                     [
-                        html.A("Home", href="https://kooexperience.com"),
-                        html.A("GitHub", href="https://github.com/haomingkoo", target="_blank", rel="noopener"),
+                        html.Img(src="/assets/favicon.svg", alt="", width=24, height=24),
+                        html.Span("Preflight"),
                     ],
+                    href="/",
+                    className="pf-logo",
+                ),
+                html.Nav(
+                    [html.A("GitHub", href="https://github.com/haomingkoo/preflight", rel="noopener")],
                     className="pf-nav-links",
+                    **{"aria-label": "Main"},
                 ),
             ],
             className="pf-nav",
         ),
         html.Section(
             [
-                html.H1("Preflight", className="pf-hero-title"),
+                html.H1("Check a dataset before you model it", className="pf-hero-title"),
                 html.P(
-                    "Upload a CSV or Parquet file. Get data health, EDA, correlation maps and baseline ML models in one pass.",
+                    "Upload a CSV or Parquet file to see its missing values, column types and distributions, then train a baseline model.",
                     className="pf-hero-sub",
                 ),
             ],
             className="pf-hero",
         ),
-        dbc.Row(
-            dbc.Col(
+        html.Div(
+            [
+                html.P("Upload a file", className="pf-upload-title"),
+                dcc.Checklist(
+                    id="upload-consent",
+                    options=[{"label": CONSENT_TEXT, "value": CONSENT_VALUE}],
+                    value=[],
+                    className="pf-consent",
+                ),
                 dcc.Upload(
                     id="upload-data",
                     children=html.Div([
                         html.Span(["Drag a file here or ", html.A("browse")], className="pf-upload-main"),
                         html.Span(f"CSV or Parquet, up to {MAX_UPLOAD_MB} MB", className="pf-upload-meta"),
-                        html.Span("First tick the box below to confirm you may upload this file.", className="pf-upload-locked"),
+                        html.Span("Tick the box above to turn on upload.", className="pf-upload-locked"),
                     ]),
                     accept=".csv,.parquet",
                     max_size=MAX_UPLOAD_BYTES,
@@ -1408,36 +1423,30 @@ app.layout = dbc.Container(
                     # dcc.Upload fades to 0.55 opacity when disabled; keep the locked box readable.
                     style_disabled={"opacity": 1},
                 ),
-                width=12,
-            ),
-        ),
-        dcc.Checklist(
-            id="upload-consent",
-            options=[{"label": CONSENT_TEXT, "value": CONSENT_VALUE}],
-            value=[],
-            className="pf-consent",
-        ),
-        html.Div(
-            [
-                html.P(
+                html.Div(
                     [
-                        "Your file is processed on our server (Railway, behind Cloudflare) only to produce this analysis. "
-                        f"It is deleted {DATA_RETENTION_SECONDS // 60} minutes after upload, or right away if you use "
-                        "Delete my data now. It is never shared or used for anything else. ",
-                        html.A("Privacy", href="/privacy", target="_blank", rel="noopener"),
-                        " · ",
-                        html.A("Terms", href="/terms", target="_blank", rel="noopener"),
+                        html.P(
+                            [
+                                "Your file is processed on our server (Railway, behind Cloudflare) only to produce this analysis. "
+                                f"It is deleted {DATA_RETENTION_SECONDS // 60} minutes after upload, or right away if you use "
+                                "Delete my data now. It is never shared or used for anything else. ",
+                                html.A("Privacy", href="/privacy", target="_blank", rel="noopener"),
+                                " · ",
+                                html.A("Terms", href="/terms", target="_blank", rel="noopener"),
+                            ],
+                            className="pf-upload-notice",
+                        ),
+                        html.Button("Delete my data now", id="btn-delete-data", n_clicks=0, className="pf-delete-btn"),
                     ],
-                    className="pf-upload-notice",
+                    className="pf-upload-row",
                 ),
-                html.Button("Delete my data now", id="btn-delete-data", n_clicks=0, className="pf-delete-btn"),
             ],
-            className="pf-upload-row",
+            className="pf-upload-block",
         ),
         dcc.Loading(
             id="loading-upload",
             type="default",
-            color="#5b8efb",
+            color="#0f766e",
             children=html.Div(
                 [
                     html.Div(id="upload-loading-anchor", style={"display": "none"}),
@@ -1469,20 +1478,26 @@ app.layout = dbc.Container(
             id="tabs",
             value="tab-guide",
             children=[
-                dcc.Tab(label="1) Guide", value="tab-guide"),
-                dcc.Tab(label="2) Data Health", value="tab-health"),
-                dcc.Tab(label="3) Missingness", value="tab-missing"),
-                dcc.Tab(label="4) Data Types", value="tab-typing"),
-                dcc.Tab(label="5) EDA", value="tab-eda"),
-                dcc.Tab(label="6) Model", value="tab-model"),
+                dcc.Tab(label="1. Guide", value="tab-guide"),
+                dcc.Tab(label="2. Data health", value="tab-health"),
+                dcc.Tab(label="3. Missing values", value="tab-missing"),
+                dcc.Tab(label="4. Column types", value="tab-typing"),
+                dcc.Tab(label="5. Explore", value="tab-eda"),
+                dcc.Tab(label="6. Model", value="tab-model"),
             ],
         ),
         html.Div([guide_pane, health_pane, missing_pane, typing_pane, eda_pane, model_pane], style={"paddingTop": "12px"}),
         html.Footer(
             [
+                html.Span("© 2026 Haoming Koo"),
+                html.Span("·", className="pf-sep", **{"aria-hidden": "true"}),
                 html.A("Privacy", href="/privacy"),
+                html.Span("·", className="pf-sep", **{"aria-hidden": "true"}),
                 html.A("Terms", href="/terms"),
-                html.A("privacy@kooexperience.com", href="mailto:privacy@kooexperience.com"),
+                html.Span("·", className="pf-sep", **{"aria-hidden": "true"}),
+                html.Span(["Contact (", html.A("privacy@kooexperience.com", href="mailto:privacy@kooexperience.com"), ")"]),
+                html.Span("·", className="pf-sep", **{"aria-hidden": "true"}),
+                html.Span(["More projects → ", html.A("kooexperience.com", href="https://kooexperience.com/")]),
             ],
             className="pf-footer",
         ),
@@ -1549,7 +1564,7 @@ def on_upload(contents, filename, missing_tokens_str, consent=None):
         return None, None, ("error", CONSENT_REQUIRED_MESSAGE), ""
 
     if not _allow_action("upload", UPLOAD_RATE_LIMIT_PER_MIN):
-        return None, None, ("error", "Upload rate limit exceeded. Please wait and retry."), ""
+        return None, None, ("error", "Too many uploads in a short time. Wait a minute, then try again."), ""
 
     try:
         df = parse_contents(contents, filename)
@@ -1557,7 +1572,7 @@ def on_upload(contents, filename, missing_tokens_str, consent=None):
         return None, None, ("error", str(e)), ""
     except Exception as exc:
         log_error("Unexpected upload parsing error", exc)
-        return None, None, ("error", "Could not read file. Please upload a valid CSV or Parquet file."), ""
+        return None, None, ("error", "We could not read that file. Check it is a CSV or Parquet file and try again."), ""
 
     tokens = [t.strip() for t in (missing_tokens_str or "").split(",")]
     df = normalize_missing_tokens(df, tokens)
@@ -1588,7 +1603,7 @@ def on_upload(contents, filename, missing_tokens_str, consent=None):
         return None, None, ("error", str(e)), ""
     except Exception as exc:
         log_error("Failed to persist uploaded dataset", exc)
-        return None, None, ("error", "Upload failed while storing data. Please retry."), ""
+        return None, None, ("error", "The upload did not finish. Try again."), ""
 
     # Explicit memory cleanup after dataframe is saved to disk
     del df
@@ -1671,7 +1686,8 @@ def _stat(label: str, value: str) -> list:
 def update_health(df_json):
     df = df_from_store(df_json)
     if df is None:
-        return "", "", "", "", [], []
+        empty = html.P("Upload a file to see its rows, columns, duplicates and missing values.", className="pf-empty")
+        return empty, "", "", "", [], []
 
     prof = basic_profile(df)
     n_rows, n_cols = df.shape
@@ -1732,18 +1748,18 @@ def feature_types_controller(df_json, target, n_save, typing_rows):
     # Save Types clicked
     if triggered == "btn-save-types.n_clicks":
         if not df_json:
-            return None, "Upload data first."
+            return None, "Upload a file first."
         if not target:
-            return None, "Select a target first."
+            return None, "Pick a target column in Data health first."
         if not typing_rows:
-            return None, "Data Types table is empty."
+            return None, "The column types table is empty."
         
         types = {
             r["column"]: (r.get("override_type") or r.get("suggested_type") or "drop")
             for r in typing_rows
         }
         # types = {r["column"]: r.get("override_type", r.get("suggested_type", "drop")) for r in typing_rows}
-        return types, f"Saved {len(types)} feature type decisions."
+        return types, f"Saved types for {len(types)} columns."
 
     return no_update, no_update
 
@@ -1798,7 +1814,7 @@ def update_missingness(df_json, sample_n, seed, col_mode, top_n):
 
     if len(miss_pct) == 0:
         bar_fig = go.Figure()
-        bar_fig.update_layout(height=CHART_HEIGHT, template="plotly_dark", title="Top Missing Columns (up to 25)")
+        bar_fig.update_layout(height=CHART_HEIGHT, template="preflight", title="Top Missing Columns (up to 25)")
     else:
         bar_fig = px.bar(
             x=miss_pct.values,
@@ -1806,7 +1822,7 @@ def update_missingness(df_json, sample_n, seed, col_mode, top_n):
             orientation="h",
             labels={"x": "Missing %", "y": "Column"},
             title="Top Missing Columns (up to 25)",
-            template="plotly_dark",
+            template="preflight",
         )
         bar_fig.update_yaxes(categoryorder="total ascending")
         bar_fig.update_layout(height=CHART_HEIGHT, margin=dict(l=220, r=40, t=60, b=40))
@@ -1830,9 +1846,9 @@ def update_missingness(df_json, sample_n, seed, col_mode, top_n):
 def typing_table_controller(df_json, target, _n_clicks, k, id_thr, int_as_cat):
     df = df_from_store(df_json)
     if df is None:
-        return [], "Upload data first."
+        return [], "Upload a file first."
     if not target:
-        return [], "Select a target in Data Health first."
+        return [], "Pick a target column in Data health first."
 
     cfg = TypingConfig(
         low_card_threshold=int(k or 20),
@@ -1906,7 +1922,10 @@ def eda_page_controller(n_prev, n_next, features, page_size, page):
     start = page * page_size + 1 if total else 0
     end = min((page + 1) * page_size, total)
 
-    label = f"Showing {start}-{end} of {total} features | Page {page + 1} of {max_page + 1}"
+    label = (
+        f"Showing {start} to {end} of {total} columns, page {page + 1} of {max_page + 1}"
+        if total else "No columns picked yet."
+    )
     return page, label
 
 @app.callback(
@@ -1923,9 +1942,9 @@ def eda_page_controller(n_prev, n_next, features, page_size, page):
 def update_eda_multi(features, cat_mode, scatter_toggle, page, page_size, feature_types, df_json, target,):
     df = df_from_store(df_json)
     if df is None:
-        return html.Div("Upload data first.")
+        return html.Div("Upload a file first.")
     if not target:
-        return html.Div("Select a target in Data Health first.")
+        return html.Div("Pick a target column in Data health first.")
     
     if feature_types:
         df = apply_type_overrides(df, feature_types) 
@@ -1944,7 +1963,7 @@ def update_eda_multi(features, cat_mode, scatter_toggle, page, page_size, featur
         numeric_selected = [f for f in features if f in df.columns and pd.api.types.is_numeric_dtype(df[f])]
         if len(numeric_selected) == 2:
             x, y = numeric_selected
-            fig_sc = px.scatter(df, x=x, y=y, color=target, template="plotly_dark")
+            fig_sc = px.scatter(df, x=x, y=y, color=target, template="preflight")
             fig_sc.update_layout(height=CHART_HEIGHT, title=f"Scatter: {x} vs {y} by {target}", margin=dict(l=40, r=40, t=60, b=40))
             blocks.append(dbc.Row([dbc.Col(dcc.Graph(figure=fig_sc), md=12)], className="mb-2"))
 
@@ -1961,14 +1980,14 @@ def update_eda_multi(features, cat_mode, scatter_toggle, page, page_size, featur
             continue
 
         if pd.api.types.is_numeric_dtype(df[feat]):
-            fig = px.histogram(df, x=feat, color=target, barmode="overlay", marginal="box", template="plotly_dark")
+            fig = px.histogram(df, x=feat, color=target, barmode="overlay", marginal="box", template="preflight")
             fig.update_layout(height=CHART_HEIGHT, title=f"{feat} distribution by {target}", margin=dict(l=40, r=40, t=60, b=40))
             per_feat_cols.append(dbc.Col(dcc.Graph(figure=fig), md=6))
         else:
             tmp = df[[feat, target]].dropna()
             if tmp.empty:
                 fig = go.Figure()
-                fig.update_layout(height=CHART_HEIGHT, template="plotly_dark", title=f"{feat}: no non-null rows")
+                fig.update_layout(height=CHART_HEIGHT, template="preflight", title=f"{feat}: no non-null rows")
                 per_feat_cols.append(dbc.Col(dcc.Graph(figure=fig), md=6))
                 continue
 
@@ -1981,7 +2000,7 @@ def update_eda_multi(features, cat_mode, scatter_toggle, page, page_size, featur
                     y="count",
                     color=target,
                     barmode="group",
-                    template="plotly_dark",
+                    template="preflight",
                     title=f"{feat} counts by {target}",
                     hover_data={feat: True, "feat_short": False, "count": True, target: True},
                 )
@@ -1999,7 +2018,7 @@ def update_eda_multi(features, cat_mode, scatter_toggle, page, page_size, featur
                     y="rate",
                     color=target,
                     barmode="stack",
-                    template="plotly_dark",
+                    template="preflight",
                     title=f"{feat} rate by category",
                     hover_data={feat: True, "feat_short": False, "rate": True, target: True},
                 )
@@ -2026,15 +2045,13 @@ def update_eda_multi(features, cat_mode, scatter_toggle, page, page_size, featur
 
 def update_corr(df_json, target, show_vals, method, min_r, top_k, feature_types):
     if "on" not in (show_vals or []):
-        fig = go.Figure()
-        fig.update_layout(height=CHART_HEIGHT, template="plotly_dark", title="Correlation (hidden)")
-        return fig, []
+        return placeholder_fig("Tick Show correlation section to see it."), []
 
     df = df_from_store(df_json)
-    if df is None or not target:
-        fig = go.Figure()
-        fig.update_layout(height=CHART_HEIGHT, template="plotly_dark", title="Correlation Matrix")
-        return fig, []
+    if df is None:
+        return placeholder_fig("Upload a file to see which numeric columns move together."), []
+    if not target:
+        return placeholder_fig("Pick a target column in Data health first."), []
 
     feature_types = feature_types or {}
 
@@ -2049,17 +2066,13 @@ def update_corr(df_json, target, show_vals, method, min_r, top_k, feature_types)
     # If you want fallback behavior, tell me, but this keeps it strict.
 
     if len(corr_cols) < 2:
-        fig = go.Figure()
-        fig.update_layout(height=CHART_HEIGHT, template="plotly_dark", title="Correlation Matrix (need ≥ 2 numeric/ordinal features)")
-        return fig, []
+        return placeholder_fig("Correlation needs at least two numeric or ordinal columns. Check Column types."), []
 
     # Ensure columns are numeric for correlation computation
     num_df = df[corr_cols].apply(pd.to_numeric, errors="coerce").dropna(axis=1, how="all")
 
     if num_df.shape[1] < 2:
-        fig = go.Figure()
-        fig.update_layout(height=CHART_HEIGHT, template="plotly_dark", title="Correlation Matrix (need ≥ 2 usable numeric columns)")
-        return fig, []
+        return placeholder_fig("Correlation needs at least two numeric columns with values."), []
 
     method = method or "spearman"
     corr = num_df.corr(method=method)
@@ -2067,8 +2080,11 @@ def update_corr(df_json, target, show_vals, method, min_r, top_k, feature_types)
     fig_hm = px.imshow(
         corr,
         aspect="auto",
-        template="plotly_dark",
+        template="preflight",
         title=f"{method.title()} correlation (typed numeric only)",
+        color_continuous_scale="BrBG",
+        zmin=-1,
+        zmax=1,
     )
     fig_hm.update_layout(height=CHART_HEIGHT, margin=dict(l=40, r=40, t=60, b=40))
 
@@ -2091,7 +2107,7 @@ def update_corr(df_json, target, show_vals, method, min_r, top_k, feature_types)
         tmp = df[[a, b, target]].dropna()
         if tmp.empty:
             continue
-        fig_sc = px.scatter(tmp, x=a, y=b, color=target, template="plotly_dark")
+        fig_sc = px.scatter(tmp, x=a, y=b, color=target, template="preflight")
         fig_sc.update_layout(height=CHART_HEIGHT, title=f"{a} vs {b} | r={r:.3f}", margin=dict(l=40, r=40, t=60, b=40))
         scatters.append(dbc.Row([dbc.Col(dcc.Graph(figure=fig_sc), md=12)], className="mb-2"))
 
@@ -2114,11 +2130,11 @@ def update_corr(df_json, target, show_vals, method, min_r, top_k, feature_types)
 def model_feature_controller(df_json, target, feature_types, _n_all, _n_clear, current_value):
     df = df_from_store(df_json)
     if df is None:
-        return [], [], "Upload data first."
+        return [], [], "Upload a file first."
     if not target:
-        return [], [], "Select a target first."
+        return [], [], "Pick a target column in Data health first."
     if not feature_types:
-        return [], [], "Go to Data Types and click Save Types before modeling."
+        return [], [], "Open Column types and press Save types before you train."
 
     X_cols = [c for c in df.columns if c != target]
     keep_cols = [c for c in X_cols if feature_types.get(c, "drop") != "drop"]
@@ -2184,7 +2200,7 @@ def train_model(
 
     if not _allow_action("train", TRAIN_RATE_LIMIT_PER_MIN):
         return (
-            html.Div("Training rate limit exceeded. Please wait and retry."),
+            html.Div("Too many training runs in a short time. Wait a minute, then try again."),
             empty_fig,
             empty_fig,
             empty_fig,
@@ -2192,13 +2208,13 @@ def train_model(
 
     df = df_from_store(df_json)
     if df is None:
-        return html.Div("Upload data first."), empty_fig, empty_fig, empty_fig
+        return html.Div("Upload a file first."), empty_fig, empty_fig, empty_fig
     if not target:
-        return html.Div("Select a target first."), empty_fig, empty_fig, empty_fig
+        return html.Div("Pick a target column in Data health first."), empty_fig, empty_fig, empty_fig
     if not feature_types:
-        return html.Div("Save feature types in Typing tab first."), empty_fig, empty_fig, empty_fig
+        return html.Div("Open Column types and press Save types first."), empty_fig, empty_fig, empty_fig
     if target not in df.columns:
-        return html.Div("Selected target is not available in the current dataset."), empty_fig, empty_fig, empty_fig
+        return html.Div("The target column is not in this file. Pick another in Data health."), empty_fig, empty_fig, empty_fig
 
     y_raw = df[target]
     X = df.drop(columns=[target])
@@ -2243,7 +2259,7 @@ def train_model(
 
     classes = sorted(list(pd.Series(y_raw).dropna().unique()))
     if len(classes) < 2:
-        return html.Div("Need at least 2 non-null target classes to train."), empty_fig, empty_fig, empty_fig
+        return html.Div("The target needs at least two different values to train a model."), empty_fig, empty_fig, empty_fig
     is_binary = len(classes) == 2
 
     valid_metrics = {m for _, m in (CV_METRICS + BINARY_ONLY_METRICS)}
@@ -2368,7 +2384,7 @@ def train_model(
             roc_fig.update_layout(
                 height=CHART_HEIGHT,
                 title=f"ROC Curve (OvR, macro AUC={roc_auc_macro:.3f})",
-                template="plotly_dark",
+                template="preflight",
                 xaxis_title="False Positive Rate",
                 yaxis_title="True Positive Rate",
                 margin=dict(l=40, r=40, t=60, b=40),
@@ -2401,7 +2417,7 @@ def train_model(
                 ],
                 className="pf-metrics-list",
             ),
-            html.H3("Classification report (holdout)"),
+            html.H3("Classification report (test split)"),
             html.Pre(rep, style={"whiteSpace": "pre-wrap"}),
         ],
         className="pf-metrics",

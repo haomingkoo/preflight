@@ -9,37 +9,54 @@ _PAGE = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>{title} · Preflight</title>
+<title>{title}: Preflight</title>
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
 <style>
 @font-face {{ font-family: 'Hanken Grotesk'; font-weight: 100 900; font-display: swap;
   src: url('/assets/fonts/hanken-grotesk-latin-wght-normal.woff2') format('woff2'); }}
-:root {{ color-scheme: dark; }}
-body {{ margin: 0; background: #04050a; color: #f4f4f6;
-  font: 1rem/1.65 'Hanken Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  -webkit-font-smoothing: antialiased; }}
-::selection {{ background: #5b8efb; color: #04050a; }}
-.legal {{ max-width: 68ch; margin: 0 auto; padding: 3rem 1.25rem 4rem; }}
-h1 {{ font-size: 2.25rem; line-height: 1.1; letter-spacing: -0.025em; font-weight: 650; margin: 1.5rem 0 0.25rem; }}
-h2 {{ font-size: 1.125rem; line-height: 1.3; font-weight: 600; margin: 2.25em 0 0.5em; }}
-p, li {{ color: #b9bbc2; text-wrap: pretty; }}
-strong {{ color: #f4f4f6; font-weight: 600; }}
-a {{ color: #5b8efb; text-underline-offset: 3px; }}
-a:hover {{ color: #8eb6f8; }}
-a:focus-visible {{ outline: 2px solid #5b8efb; outline-offset: 3px; border-radius: 2px; }}
-.legal-back a, .legal-footer a {{ display: inline-flex; align-items: center; min-height: 44px; }}
-.legal-meta, .legal-back, .legal-footer {{ color: #9b9ea7; font-size: 0.875rem; margin: 0; }}
-.legal-footer {{ margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid rgba(244,244,246,0.1); }}
+:root {{ color-scheme: light; }}
+* {{ box-sizing: border-box; }}
+body {{ margin: 0; background: #f4f6f6; color: #141a1d;
+  font: 1rem/1.65 'Hanken Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif; }}
+::selection {{ background: #c7e5e1; color: #141a1d; }}
+.wrap {{ max-width: 1200px; margin: 0 auto; padding: 0 1rem; }}
+header {{ border-bottom: 1px solid #dbe1e1; }}
+header .wrap {{ display: flex; align-items: center; justify-content: space-between; min-height: 76px; }}
+.logo {{ display: inline-flex; align-items: center; gap: .75rem; min-height: 44px; color: #141a1d; font-weight: 700; text-decoration: none; }}
+header nav a {{ display: inline-flex; align-items: center; min-height: 44px; color: #3a4448; font-weight: 500; text-decoration: none; }}
+.legal {{ max-width: 68ch; padding: 3rem 0 0; margin: 0 1rem 0 max(1rem, calc((100% - 1200px) / 2 + 1rem)); }}
+h1 {{ font-size: 2rem; line-height: 1.15; letter-spacing: -0.02em; font-weight: 650; margin: 0 0 0.25rem; }}
+h2 {{ font-size: 1.125rem; line-height: 1.3; font-weight: 600; margin: 2em 0 0.5em; }}
+p, li {{ color: #3a4448; text-wrap: pretty; }}
+strong {{ color: #141a1d; font-weight: 600; }}
+a {{ color: #0f766e; text-underline-offset: 3px; }}
+a:hover {{ color: #0b5953; }}
+a:focus-visible {{ outline: 2px solid #0f766e; outline-offset: 3px; border-radius: 2px; }}
+.legal-meta {{ color: #56616a; font-size: 0.875rem; margin: 0; }}
 li {{ margin: 0.4em 0; }}
+footer {{ margin-top: 4rem; border-top: 1px solid #dbe1e1; }}
+footer .wrap {{ padding: 1.5rem 1rem 2rem; font-size: 0.8125rem; color: #56616a; display: flex; flex-wrap: wrap; }}
+footer a {{ color: #56616a; }}
+footer .sep {{ padding: 0 0.5rem; }}
 </style>
 </head>
 <body>
+<header><div class="wrap">
+<a class="logo" href="/"><img src="/assets/favicon.svg" alt="" width="24" height="24" />Preflight</a>
+<nav aria-label="Main"><a href="https://github.com/haomingkoo/preflight" rel="noopener">GitHub</a></nav>
+</div></header>
 <main class="legal">
-<p class="legal-back"><a href="/">Back to Preflight</a></p>
 <h1>{title}</h1>
 <p class="legal-meta">Last updated {updated}</p>
 {body}
-<p class="legal-footer"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></p>
 </main>
+<footer><div class="wrap">
+<span>&copy; 2026 Haoming Koo</span><span class="sep" aria-hidden="true">&middot;</span>
+<a href="/privacy">Privacy</a><span class="sep" aria-hidden="true">&middot;</span>
+<a href="/terms">Terms</a><span class="sep" aria-hidden="true">&middot;</span>
+<span>Contact ({contact})</span><span class="sep" aria-hidden="true">&middot;</span>
+<span>More projects &rarr; <a href="https://kooexperience.com/">kooexperience.com</a></span>
+</div></footer>
 </body>
 </html>
 """
@@ -143,7 +160,7 @@ As far as the law allows, we are not liable for losses from using it or relying 
 
 
 def render(title: str, body: str) -> str:
-    return _PAGE.format(title=title, updated=LAST_UPDATED, body=body)
+    return _PAGE.format(title=title, updated=LAST_UPDATED, body=body, contact=CONTACT)
 
 
 PRIVACY_HTML = render("Privacy notice", PRIVACY_BODY)
