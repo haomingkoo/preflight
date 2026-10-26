@@ -204,3 +204,15 @@ def test_pages_share_footer_and_favicon(path: str) -> None:
 
 def test_legal_pages_load_their_assets_without_auth() -> None:
     assert {"/assets/favicon.svg", "/assets/fonts/hanken-grotesk-latin-wght-normal.woff2"} <= app.PUBLIC_PATHS
+
+
+def test_csp_allows_same_origin_tour_video() -> None:
+    assert "media-src 'self'" in app.CSP_POLICY
+
+
+def test_tour_video_is_served_with_range_support() -> None:
+    resp = app.server.test_client().get("/assets/media/preflight.mp4", headers={"Range": "bytes=0-99"})
+
+    assert resp.status_code == 206
+    assert resp.mimetype == "video/mp4"
+    assert len(resp.data) == 100
