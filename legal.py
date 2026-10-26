@@ -47,7 +47,7 @@ footer .sep {{ padding: 0 0.5rem; }}
 </div></header>
 <main class="legal">
 <h1>{title}</h1>
-<p class="legal-meta">Last updated {updated}</p>
+{meta}
 {body}
 </main>
 <footer><div class="wrap">
@@ -159,9 +159,17 @@ As far as the law allows, we are not liable for losses from using it or relying 
 """
 
 
-def render(title: str, body: str) -> str:
-    return _PAGE.format(title=title, updated=LAST_UPDATED, body=body, contact=CONTACT)
+def render(title: str, body: str, meta: bool = True) -> str:
+    line = f'<p class="legal-meta">Last updated {LAST_UPDATED}</p>' if meta else ""
+    return _PAGE.format(title=title, meta=line, body=body, contact=CONTACT)
 
 
 PRIVACY_HTML = render("Privacy notice", PRIVACY_BODY)
 TERMS_HTML = render("Terms of use", TERMS_BODY)
+NOT_FOUND_HTML = render(
+    "Page not found",
+    '<p>There is nothing at this address.</p>\n'
+    '<p><a href="/">Back to Preflight</a> or see more projects at '
+    '<a href="https://kooexperience.com/">kooexperience.com</a>.</p>',
+    meta=False,
+)
