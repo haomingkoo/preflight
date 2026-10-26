@@ -1,4 +1,11 @@
 # Preflight
+<p align="center">
+  <a href="https://preflight.kooexperience.com/"><img src="docs/media/preflight-preview.webp" width="800" alt="Preflight finds a 0.748 correlation between sun hours and plant height, then trains a baseline model that scores 0.889 ROC-AUC"></a>
+  <br>
+  <a href="https://preflight.kooexperience.com/?tour=1">▶ 30-second tour</a> · <a href="https://preflight.kooexperience.com/">Live app</a> · <a href="https://kooexperience.com/">kooexperience.com</a>
+  <br>
+  <sub>Music: Sascha Ende, ende.app (CC BY 4.0)</sub>
+</p>
 
 Preflight is a Dash-based EDA and baseline classification workbench for quick dataset triage and model sanity checks.
 

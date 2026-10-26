@@ -130,6 +130,7 @@ CSP_POLICY = (
     "style-src 'self' 'unsafe-inline'; "
     "font-src 'self' data:; "
     "img-src 'self' data: blob:; "
+    "media-src 'self'; "
     "connect-src 'self' https://cloudflareinsights.com; "
     "frame-ancestors 'none'; "
     "base-uri 'self'; "
@@ -1397,6 +1398,7 @@ app.layout = dbc.Container(
                     "Upload a CSV or Parquet file to see its missing values, column types and distributions, then train a baseline model.",
                     className="pf-hero-sub",
                 ),
+                html.Button("▶ 30-second tour", id="tour-open", type="button"),
             ],
             className="pf-hero",
         ),
@@ -1500,6 +1502,33 @@ app.layout = dbc.Container(
                 html.Span(["More projects → ", html.A("kooexperience.com", href="https://kooexperience.com/")]),
             ],
             className="pf-footer",
+        ),
+        # Behaviour (open, close, ?tour=1) lives in assets/tour.js.
+        html.Dialog(
+            [
+                html.Div(
+                    [
+                        html.H2("Preflight in 30 seconds", id="tour-title", className="pf-tour-title"),
+                        html.Button("×", id="tour-close", type="button", **{"aria-label": "Close video"}),
+                    ],
+                    className="pf-tour-head",
+                ),
+                html.Video(
+                    [
+                        html.Source(src="/assets/media/preflight.webm", type="video/webm"),
+                        html.Source(src="/assets/media/preflight.mp4", type="video/mp4"),
+                    ],
+                    id="tour-video",
+                    controls=True,
+                    preload="none",
+                    poster="/assets/media/preflight-poster.jpg",
+                    className="pf-tour-video",
+                ),
+                html.P("Music: Sascha Ende, ende.app (CC BY 4.0)", className="pf-tour-credit"),
+            ],
+            id="tour-dialog",
+            className="pf-tour",
+            **{"aria-labelledby": "tour-title"},
         ),
     ],
 )

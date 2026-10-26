@@ -164,6 +164,37 @@ pre { font-family: var(--mono); font-size: .8125rem; color: var(--ink-soft); }
   margin: var(--s3) 0 0;
 }
 
+/* ── Tour ────────────────────────────────────────────────── */
+/* IDs so the text link beats the global button rule. */
+#tour-open {
+  background: none !important;
+  border: 0 !important;
+  padding: 0 !important;
+  margin-top: var(--s2);
+  color: var(--ink-mute) !important;
+  font-weight: 400 !important;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+#tour-open:hover { color: var(--accent) !important; }
+.pf-tour {
+  width: min(960px, calc(100vw - 2rem));
+  max-width: none;
+  padding: var(--s4);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--ink);
+}
+.pf-tour[open] { animation: pf-tour-in 200ms var(--ease); }
+.pf-tour::backdrop { background: rgba(20, 26, 29, .6); }
+@keyframes pf-tour-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.pf-tour-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); margin-bottom: var(--s3); }
+.pf-tour-title { font-size: 1.125rem !important; margin: 0; }
+#tour-close { width: var(--target); padding: 0 !important; flex: none; font-size: 1.5rem !important; }
+.pf-tour-video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: var(--radius); }
+.pf-tour-credit { margin: var(--s2) 0 0; font-size: .8125rem; color: var(--ink-mute); }
+
 /* ── Upload ──────────────────────────────────────────────── */
 .pf-upload-block {
   background: var(--surface);
@@ -704,6 +735,7 @@ textarea:focus {
   }
   button:not(.dash-table-container button):not(.btn-close):active:not(:disabled) { transform: none; }
   .pf-advanced > summary::before { transition: none; }
+  .pf-tour[open] { animation: none; }
 }
 @keyframes pf-fade { from { opacity: .5; } to { opacity: 1; } }
 
