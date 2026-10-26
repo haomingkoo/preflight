@@ -778,6 +778,9 @@ def security_guard():
     if REQUIRE_AUTH and request.path not in PUBLIC_PATHS and not _is_authorized_request():
         return _unauthorized_response()
 
+    if request.method == "GET" and request.path not in APP_PAGES and not request.path.startswith(("/_", "/assets/")):
+        return _not_found()
+
     if ENFORCE_POST_ORIGIN and request.method == "POST" and request.path.startswith("/_dash"):
         origin = request.headers.get("Origin")
         if origin and not _is_same_origin(origin):
@@ -798,6 +801,14 @@ def add_security_headers(resp):
     if request.headers.get("X-Forwarded-Proto", "").lower() == "https" or request.is_secure:
         resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     return resp
+
+APP_PAGES = {"/", "/privacy", "/terms"}
+
+
+@server.errorhandler(404)
+def _not_found(_exc=None) -> Response:
+    return Response(legal.NOT_FOUND_HTML, status=404, mimetype="text/html")
+
 
 @server.route("/privacy")
 def privacy_page() -> Response:

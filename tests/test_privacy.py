@@ -216,3 +216,15 @@ def test_tour_video_is_served_with_range_support() -> None:
     assert resp.status_code == 206
     assert resp.mimetype == "video/mp4"
     assert len(resp.data) == 100
+
+
+def test_unknown_path_gets_styled_404_with_links_home() -> None:
+    client = app.server.test_client()
+    for path in ("/no-such-page", "/assets/nope.png"):
+        resp = client.get(path)
+        body = resp.get_data(as_text=True)
+        assert resp.status_code == 404
+        assert resp.mimetype == "text/html"
+        assert 'href="/"' in body and "https://kooexperience.com/" in body
+    assert client.get("/").status_code == 200
+    assert client.get("/_dash-layout").status_code == 200
